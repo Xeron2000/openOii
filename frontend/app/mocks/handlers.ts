@@ -1,6 +1,11 @@
-import { http, HttpResponse } from 'msw';
+import { http, HttpResponse, passthrough } from 'msw';
 
 export const handlers = [
-  // Define your handlers here
+  // Ignore Google Storage requests
+  http.get('https://storage.googleapis.com/*', () => {
+    return passthrough();
+  }),
+
+  // Define your other handlers here
   // Example: http.get('/api/user', () => HttpResponse.json({ name: 'John Doe' }))
 ];

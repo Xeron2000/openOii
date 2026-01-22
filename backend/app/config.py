@@ -112,6 +112,14 @@ class Settings(BaseSettings):
         default=True,
         description="豆包视频是否生成音频",
     )
+    video_image_mode: str = Field(
+        default="first_frame",
+        description="图生视频模式：first_frame（仅分镜首帧）或 reference（拼接参考图）",
+    )
+    video_inline_local_images: bool = Field(
+        default=True,
+        description="图生视频时，未配置 PUBLIC_BASE_URL 则尝试内联本地图片为 data URL",
+    )
 
     # 视频服务提供商选择
     video_provider: str = Field(
@@ -120,6 +128,10 @@ class Settings(BaseSettings):
     )
 
     request_timeout_s: float = 120.0
+    public_base_url: str | None = Field(
+        default=None,
+        description="对外可访问的后端地址（用于把 /static 路径转换为完整 URL）",
+    )
 
     def use_i2i(self) -> bool:
         """是否启用图生图（I2I）"""
@@ -156,6 +168,17 @@ class Settings(BaseSettings):
         if self.anthropic_base_url:
             env["ANTHROPIC_BASE_URL"] = self.anthropic_base_url
         return env
+
+    def build_public_url(self, path: str | None) -> str | None:
+        """将本地路径（如 /static/xxx）转换为对外可访问的完整 URL"""
+        if not path:
+            return path
+        if path.startswith(("http://", "https://")):
+            return path
+        if not self.public_base_url:
+            return path
+        normalized = path if path.startswith("/") else f"/{path}"
+        return f"{self.public_base_url.rstrip('/')}{normalized}"
 
 
 @lru_cache

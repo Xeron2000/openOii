@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useEditorStore } from "~/stores/editorStore";
 import { ProjectOverview } from "./ProjectOverview";
 import { FilmIcon, UserIcon } from "@heroicons/react/24/outline";
+import { getStaticUrl } from "~/services/api";
 
 interface CanvasProps {
   projectId: number;
@@ -65,9 +66,9 @@ export function Canvas({ projectId }: CanvasProps) {
                       <h3 className="card-title text-sm">{char.name}</h3>
                       {char.image_url ? (
                         <img
-                          src={char.image_url}
+                          src={getStaticUrl(char.image_url)}
                           alt={char.name}
-                          className="w-full h-32 object-cover rounded"
+                          className="w-full h-32 object-contain rounded"
                         />
                       ) : (
                         <div className="w-full h-32 bg-base-300 rounded flex items-center justify-center">
@@ -97,48 +98,52 @@ export function Canvas({ projectId }: CanvasProps) {
               </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {shots.map((shot) => (
-                  <div
-                    key={shot.id}
-                    className="card bg-base-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => setSelectedShot(shot.id)}
-                  >
-                    <div className="card-body p-4">
-                      <h3 className="card-title text-sm">镜头 {shot.order}</h3>
-                      {shot.image_url && (
-                        <img
-                          src={shot.image_url}
-                          alt={`镜头 ${shot.order}`}
-                          className="w-full h-32 object-cover rounded"
-                        />
-                      )}
-                      {shot.video_url && (
-                        <div className="relative mt-2">
-                          <video
-                            src={shot.video_url}
-                            className="w-full h-32 object-cover rounded"
-                            muted
-                            loop
-                            onMouseEnter={(e) => e.currentTarget.play()}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.pause();
-                              e.currentTarget.currentTime = 0;
-                            }}
+                {shots.map((shot) => {
+                  const shotImageUrl = getStaticUrl(shot.image_url);
+                  const shotVideoUrl = getStaticUrl(shot.video_url);
+                  return (
+                    <div
+                      key={shot.id}
+                      className="card bg-base-100 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => setSelectedShot(shot.id)}
+                    >
+                      <div className="card-body p-4">
+                        <h3 className="card-title text-sm">镜头 {shot.order}</h3>
+                        {shotImageUrl && (
+                          <img
+                            src={shotImageUrl}
+                            alt={`镜头 ${shot.order}`}
+                            className="w-full h-32 object-contain rounded"
                           />
-                          <div className="badge badge-success badge-xs absolute top-1 right-1 text-success-content">视频</div>
-                        </div>
-                      )}
-                      {!shot.image_url && !shot.video_url && (
-                        <div className="w-full h-32 bg-base-300 rounded flex items-center justify-center">
-                          <FilmIcon className="w-6 h-6" aria-hidden="true" />
-                        </div>
-                      )}
-                      <p className="text-xs text-base-content/80">
-                        {shot.description}
-                      </p>
+                        )}
+                        {shotVideoUrl && (
+                          <div className="relative mt-2">
+                            <video
+                              src={shotVideoUrl}
+                              className="w-full h-32 object-cover rounded"
+                              muted
+                              loop
+                              onMouseEnter={(e) => e.currentTarget.play()}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.pause();
+                                e.currentTarget.currentTime = 0;
+                              }}
+                            />
+                            <div className="badge badge-success badge-xs absolute top-1 right-1 text-success-content">视频</div>
+                          </div>
+                        )}
+                        {!shotImageUrl && !shotVideoUrl && (
+                          <div className="w-full h-32 bg-base-300 rounded flex items-center justify-center">
+                            <FilmIcon className="w-6 h-6" aria-hidden="true" />
+                          </div>
+                        )}
+                        <p className="text-xs text-base-content/80">
+                          {shot.description}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

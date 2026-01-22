@@ -28,6 +28,23 @@ class VideoService:
     def _is_retryable_status(self, status_code: int) -> bool:
         return status_code in {408, 429, 500, 502, 503, 504}
 
+    def _sanitize_url(self, url: str) -> str:
+        cleaned = url.strip().strip("\"'")
+        return cleaned.rstrip(").,;]}>")
+
+    def _extract_url_from_text(self, text: str) -> str | None:
+        if not text or not isinstance(text, str):
+            return None
+        candidate = text.strip()
+        if candidate.startswith("data:"):
+            return candidate
+        if candidate.startswith(("http://", "https://")):
+            return self._sanitize_url(candidate)
+        urls = re.findall(r"https?://[^\s<>\"]+", candidate)
+        if urls:
+            return self._sanitize_url(urls[0])
+        return None
+
     async def _post_json_with_retry(self, url: str, payload: dict[str, Any]) -> dict[str, Any]:
         delay_s = 0.5
         last_exc: Exception | None = None
@@ -185,17 +202,9 @@ class VideoService:
                 }
                 content = await self._post_stream_with_retry(url, payload)
 
-                if isinstance(content, str) and content.strip():
-                    # 如果内容看起来像 URL，直接返回
-                    if content.startswith(("http://", "https://", "data:")):
-                        return content.strip()
-                    # 否则尝试从文本中提取 URL
-                    urls = re.findall(r'https?://[^\s<>"]+', content)
-                    if urls:
-                        return urls[0]
-                    # 如果没有找到 URL，返回内容本身
-                    return content.strip()
-
+                extracted = self._extract_url_from_text(content)
+                if extracted:
+                    return extracted
                 raise RuntimeError(f"Video API stream response missing URL: {content}")
             else:
                 # 标准视频生成接口（图生视频）
@@ -211,7 +220,7 @@ class VideoService:
                     first = items[0] if isinstance(items[0], dict) else {}
                     result_url = first.get("url")
                     if isinstance(result_url, str) and result_url:
-                        return result_url
+                        return self._sanitize_url(result_url)
 
                 raise RuntimeError(f"Video API response missing URL: {data}")
 
@@ -226,17 +235,9 @@ class VideoService:
             }
             content = await self._post_stream_with_retry(url, payload)
 
-            if isinstance(content, str) and content.strip():
-                # 如果内容看起来像 URL，直接返回
-                if content.startswith(("http://", "https://", "data:")):
-                    return content.strip()
-                # 否则尝试从文本中提取 URL
-                urls = re.findall(r'https?://[^\s<>"]+', content)
-                if urls:
-                    return urls[0]
-                # 如果没有找到 URL，返回内容本身
-                return content.strip()
-
+            extracted = self._extract_url_from_text(content)
+            if extracted:
+                return extracted
             raise RuntimeError(f"Video API stream response missing URL: {content}")
         else:
             # 标准视频生成接口（非流式）
@@ -246,7 +247,7 @@ class VideoService:
                 first = items[0] if isinstance(items[0], dict) else {}
                 result_url = first.get("url")
                 if isinstance(result_url, str) and result_url:
-                    return result_url
+                    return self._sanitize_url(result_url)
 
             raise RuntimeError(f"Video API response missing URL: {data}")
 
@@ -268,4 +269,3 @@ class VideoService:
 
         merger = get_video_merger_service()
         return await merger.merge_videos(video_urls)
-

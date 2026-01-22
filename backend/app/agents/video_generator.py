@@ -48,12 +48,11 @@ class VideoGeneratorAgent(BaseAgent):
         """获取项目风格"""
         return "anime"
 
-    def _get_duration(self, shot: Shot) -> float:
+    def _get_duration(self, shot: Shot, default_duration: float) -> float:
         """获取视频时长（秒）"""
         if shot.duration and shot.duration > 0:
             return shot.duration
-        # 默认时长 5 秒
-        return 5.0
+        return default_duration
 
     async def run(self, ctx: AgentContext) -> None:
         # 查询项目的所有角色（用于保持视觉一致性）
@@ -62,15 +61,18 @@ class VideoGeneratorAgent(BaseAgent):
         )
         characters = list(char_res.scalars().all())
 
-        # 查找没有视频的 Shot
-        res = await ctx.session.execute(
+        # 查找没有视频的 Shot（可按目标分镜过滤）
+        query = (
             select(Shot)
             .join(Scene, Shot.scene_id == Scene.id)
             .where(
                 Scene.project_id == ctx.project.id,
-                Shot.video_url.is_(None)
+                Shot.video_url.is_(None),
             )
         )
+        if ctx.target_ids and ctx.target_ids.shot_ids:
+            query = query.where(Shot.id.in_(ctx.target_ids.shot_ids))
+        res = await ctx.session.execute(query)
         shots = res.scalars().all()
         if not shots:
             await self.send_message(ctx, "所有分镜已有视频。")
@@ -80,12 +82,16 @@ class VideoGeneratorAgent(BaseAgent):
         use_image_mode = ctx.settings.use_i2v()
         # 检查是否使用豆包服务
         is_doubao = isinstance(ctx.video, DoubaoVideoService)
+        default_duration = (
+            float(ctx.settings.doubao_video_duration) if is_doubao else 5.0
+        )
 
         total = len(shots)
         updated_count = 0
 
         mode_desc = "图生视频" if use_image_mode else "文生视频"
         provider_desc = "豆包" if is_doubao else "OpenAI兼容"
+        image_mode = (ctx.settings.video_image_mode or "first_frame").strip().lower()
         # 发送带进度的消息
         await self.send_message(
             ctx,
@@ -108,15 +114,35 @@ class VideoGeneratorAgent(BaseAgent):
                 )
 
                 video_prompt = self._build_video_prompt(shot, characters)
-                duration = self._get_duration(shot)
+                duration = self._get_duration(shot, default_duration)
 
                 # 根据服务类型选择不同的调用方式
                 if is_doubao:
                     # 豆包服务：使用图片 URL
                     image_url: str | None = None
                     if use_image_mode and shot.image_url:
-                        image_url = shot.image_url
-                        await self.send_message(ctx, f"镜头 {shot.order}: 使用分镜首帧图片作为参考")
+                        if image_mode == "reference":
+                            try:
+                                # 收集有图片的角色
+                                char_image_urls = [c.image_url for c in characters if c.image_url]
+
+                                # 拼接分镜图和角色图，保存到本地并获取 URL
+                                image_url = await self.image_composer.compose_and_save_reference_image(
+                                    shot_image_url=shot.image_url,
+                                    character_image_urls=char_image_urls,
+                                )
+                                await self.send_message(
+                                    ctx,
+                                    f"镜头 {shot.order}: 已生成参考图（分镜图 + {len(char_image_urls)} 个角色图）",
+                                )
+                            except Exception as e:
+                                await self.send_message(
+                                    ctx,
+                                    f"镜头 {shot.order}: 参考图生成失败，将使用分镜首帧图: {e}",
+                                )
+                                image_url = shot.image_url
+                        else:
+                            image_url = shot.image_url
 
                     # 豆包服务的 generate_url 接口
                     video_url = await ctx.video.generate_url(
@@ -131,15 +157,22 @@ class VideoGeneratorAgent(BaseAgent):
                     reference_image_bytes: bytes | None = None
                     if use_image_mode and shot.image_url:
                         try:
-                            # 收集有图片的角色
-                            char_image_urls = [c.image_url for c in characters if c.image_url]
+                            if image_mode == "reference":
+                                # 收集有图片的角色
+                                char_image_urls = [c.image_url for c in characters if c.image_url]
 
-                            # 拼接分镜图和角色图
-                            reference_image_bytes = await self.image_composer.compose_reference_image(
-                                shot_image_url=shot.image_url,
-                                character_image_urls=char_image_urls,
-                            )
-                            await self.send_message(ctx, f"镜头 {shot.order}: 已生成参考图（分镜图 + {len(char_image_urls)} 个角色图）")
+                                # 拼接分镜图和角色图
+                                reference_image_bytes = await self.image_composer.compose_reference_image(
+                                    shot_image_url=shot.image_url,
+                                    character_image_urls=char_image_urls,
+                                )
+                                await self.send_message(ctx, f"镜头 {shot.order}: 已生成参考图（分镜图 + {len(char_image_urls)} 个角色图）")
+                            else:
+                                # 仅使用分镜首帧图
+                                reference_image_bytes = await self.image_composer.compose_reference_image(
+                                    shot_image_url=shot.image_url,
+                                    character_image_urls=[],
+                                )
                         except Exception as e:
                             await self.send_message(ctx, f"镜头 {shot.order}: 参考图生成失败，将使用文生视频模式: {e}")
                             reference_image_bytes = None

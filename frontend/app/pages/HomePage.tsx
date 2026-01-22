@@ -60,7 +60,7 @@ export function HomePage() {
               </span>
             </h1>
             <p className="text-base-content/80 font-sketch text-lg mt-4">
-              用 AI 将你的故事转化为漫画视频
+              用 AI Agent 将你的故事转化为动漫视频
             </p>
           </div>
 

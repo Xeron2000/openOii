@@ -13,23 +13,32 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 # 静态文件目录
-STATIC_DIR = Path(__file__).parent.parent.parent / "static"
+STATIC_DIR = Path(__file__).parent.parent / "static"
+
+
+def _extract_static_path(url: str | None) -> str | None:
+    if not url:
+        return None
+    if url.startswith("/static/"):
+        return url
+    parsed = urlparse(url)
+    if parsed.path.startswith("/static/"):
+        return parsed.path
+    return None
 
 
 def is_local_file(url: str | None) -> bool:
     """判断 URL 是否指向本地文件"""
-    if not url:
-        return False
-    # 本地文件路径以 /static/ 开头
-    return url.startswith("/static/")
+    return _extract_static_path(url) is not None
 
 
 def get_local_path(url: str) -> Path | None:
     """将本地 URL 转换为文件系统路径"""
-    if not is_local_file(url):
+    static_path = _extract_static_path(url)
+    if not static_path:
         return None
-    # /static/videos/xxx.mp4 -> backend/static/videos/xxx.mp4
-    relative_path = url.lstrip("/static/")
+    # /static/videos/xxx.mp4 -> backend/app/static/videos/xxx.mp4
+    relative_path = static_path.removeprefix("/static/")
     return STATIC_DIR / relative_path
 
 

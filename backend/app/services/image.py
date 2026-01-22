@@ -5,11 +5,15 @@ import base64
 import json
 import logging
 import re
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
+from uuid import uuid4
 
 import httpx
 
 from app.config import Settings
+from app.services.file_cleaner import STATIC_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,131 @@ class ImageService:
     def _is_modelscope_api(self) -> bool:
         """检测是否是 ModelScope API"""
         return "modelscope" in self.settings.image_base_url.lower()
+
+    def _sanitize_url(self, url: str) -> str:
+        cleaned = url.strip().strip("\"'")
+        return cleaned.rstrip(").,;]}>")
+
+    def _extract_url_from_text(self, text: str) -> str | None:
+        if not text or not isinstance(text, str):
+            return None
+        candidate = text.strip()
+        if candidate.startswith("data:"):
+            return candidate
+        if candidate.startswith(("http://", "https://")):
+            return self._sanitize_url(candidate)
+        urls = re.findall(r"https?://[^\s<>\"]+", candidate)
+        if urls:
+            return self._sanitize_url(urls[0])
+        return None
+
+    async def cache_external_image(self, url: str) -> str:
+        """缓存外部图片到本地静态目录，返回本地 URL。
+
+        仅处理 http(s) URL，失败时返回原始 URL。
+        """
+        if not url or url.startswith(("/static/", "data:")):
+            return url
+        if not url.startswith(("http://", "https://")):
+            return url
+
+        content_type_map = {
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "image/jpg": ".jpg",
+            "image/webp": ".webp",
+            "image/gif": ".gif",
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=self.settings.request_timeout_s) as client:
+                res = await client.get(url)
+                res.raise_for_status()
+                content = res.content
+                headers = res.headers
+
+            content_type = headers.get("Content-Type", "").split(";")[0].strip().lower()
+            ext = content_type_map.get(content_type)
+            if not ext:
+                suffix = Path(urlparse(url).path).suffix
+                ext = suffix if suffix else ".png"
+
+            static_dir = STATIC_DIR / "images"
+            static_dir.mkdir(parents=True, exist_ok=True)
+            filename = f"{uuid4().hex}{ext}"
+            save_path = static_dir / filename
+            save_path.write_bytes(content)
+
+            return f"/static/images/{filename}"
+        except Exception as exc:
+            logger.warning("Failed to cache external image, using original URL: %s", exc)
+            return url
+
+    async def download_and_save(self, url: str, save_path: Path) -> None:
+        """从 URL 下载图片并保存到本地
+
+        Args:
+            url: 图片 URL
+            save_path: 保存路径（完整路径，包含文件名）
+        """
+        from urllib.request import urlopen
+        from urllib.error import HTTPError, URLError
+
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Downloading image from: {url[:100]}...")
+        logger.debug(f"Full URL: {url}")
+        logger.info(f"Saving to: {save_path}")
+
+        try:
+            # 使用 asyncio.to_thread 在线程池中运行同步的 urllib 代码
+            def _download():
+                try:
+                    with urlopen(url, timeout=120) as response:
+                        status = response.status
+                        headers = dict(response.headers)
+
+                        logger.info(f"Response status: {status}")
+                        logger.debug(f"Response headers: {headers}")
+
+                        if status != 200:
+                            body = response.read().decode('utf-8', errors='ignore')
+                            logger.error(f"Failed to download image. Status: {status}")
+                            logger.error(f"Response body: {body[:500]}")
+                            raise RuntimeError(f"Failed to download image (HTTP {status})")
+
+                        # 检查内容类型
+                        content_type = headers.get('Content-Type', '')
+                        if not content_type.startswith('image/'):
+                            logger.warning(f"Unexpected content type: {content_type}")
+
+                        # 读取内容
+                        content = response.read()
+                        return content
+
+                except HTTPError as e:
+                    logger.error(f"HTTP error: {e.code} {e.reason}")
+                    body = e.read().decode('utf-8', errors='ignore')
+                    logger.error(f"Response body: {body[:500]}")
+                    raise RuntimeError(f"Failed to download image (HTTP {e.code})") from e
+                except URLError as e:
+                    logger.error(f"URL error: {e.reason}")
+                    raise RuntimeError(f"Failed to download image: {e.reason}") from e
+
+            # 在线程池中执行下载
+            content = await asyncio.to_thread(_download)
+
+            # 保存文件
+            with open(save_path, "wb") as f:
+                f.write(content)
+
+            logger.info(f"Successfully saved image ({len(content)} bytes)")
+
+        except RuntimeError:
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error downloading image: {e}", exc_info=True)
+            raise RuntimeError(f"Failed to download image: {str(e)[:100]}") from e
 
     async def _modelscope_generate(self, prompt: str) -> str:
         """ModelScope 异步图片生成"""
@@ -257,14 +386,9 @@ class ImageService:
                     }
                     content = await self._post_stream_with_retry(url, payload)
 
-                    if isinstance(content, str) and content.strip():
-                        if content.startswith(("http://", "https://", "data:")):
-                            return content.strip()
-                        urls = re.findall(r'https?://[^\s<>"]+', content)
-                        if urls:
-                            return urls[0]
-                        return content.strip()
-
+                    extracted = self._extract_url_from_text(content)
+                    if extracted:
+                        return extracted
                     raise RuntimeError(f"Image API stream response missing URL: {content}")
                 else:
                     # 标准图片生成接口（图生图）
@@ -283,7 +407,7 @@ class ImageService:
                         first = items[0] if isinstance(items[0], dict) else {}
                         result_url = first.get("url")
                         if isinstance(result_url, str) and result_url:
-                            return result_url
+                            return self._sanitize_url(result_url)
 
                     raise RuntimeError(f"Image API response missing URL: {data}")
             except Exception as exc:
@@ -305,14 +429,9 @@ class ImageService:
             }
             content = await self._post_stream_with_retry(url, payload)
 
-            if isinstance(content, str) and content.strip():
-                if content.startswith(("http://", "https://", "data:")):
-                    return content.strip()
-                urls = re.findall(r'https?://[^\s<>"]+', content)
-                if urls:
-                    return urls[0]
-                return content.strip()
-
+            extracted = self._extract_url_from_text(content)
+            if extracted:
+                return extracted
             raise RuntimeError(f"Image API stream response missing URL: {content}")
 
         # DALL-E 风格（非流式）
@@ -322,7 +441,6 @@ class ImageService:
             first = items[0] if isinstance(items[0], dict) else {}
             result_url = first.get("url")
             if isinstance(result_url, str) and result_url:
-                return result_url
+                return self._sanitize_url(result_url)
 
         raise RuntimeError(f"Image API response missing URL: {data}")
-

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentContext
-from app.agents.character_artist import CharacterArtistAgent
+from app.agents.character_artist import SingleCharacterArtistAgent
 from app.agents.orchestrator import AGENT_STAGE_MAP
 from app.api.deps import SessionDep, SettingsDep, WsManagerDep
 from app.config import Settings
@@ -205,7 +205,7 @@ async def regenerate_character(
         {"type": "character_updated", "data": {"character": _character_payload(character)}},
     )
 
-    agent_plan: list[Any] = [CharacterArtistAgent()]
+    agent_plan: list[Any] = [SingleCharacterArtistAgent(character_id)]
     run = AgentRun(
         project_id=project_id,
         status="running",

@@ -190,7 +190,7 @@ export function Sidebar() {
             </button>
           </div>
           <div className="text-xs text-center text-base-content/50 font-sketch flex items-center justify-center gap-1">
-            <span>openOii - AI 漫画视频生成器</span>
+            <span>openOii - AI 漫剧生成器</span>
             <SparklesIcon className="w-5 h-5" aria-hidden="true" />
           </div>
         </div>

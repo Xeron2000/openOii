@@ -1,17 +1,28 @@
 from __future__ import annotations
 
-import json
-
 from sqlalchemy import select
 
 from app.agents.base import AgentContext, BaseAgent
-from app.agents.utils import extract_json
 from app.models.project import Character
 
 
 class CharacterArtistAgent(BaseAgent):
     """为角色生成参考图片"""
     name = "character_artist"
+
+    async def _generate_character_image(self, ctx: AgentContext, character: Character) -> None:
+        # 生成图片 URL
+        image_prompt = self._build_image_prompt(character)
+        external_url = await ctx.image.generate_url(prompt=image_prompt)
+        external_url = await ctx.image.cache_external_image(external_url)
+
+        # 直接保存外部 URL（不下载）
+        character.image_url = external_url
+        ctx.session.add(character)
+        await ctx.session.flush()
+
+        # 发送角色更新事件
+        await self.send_character_event(ctx, character, "character_updated")
 
     def _build_image_prompt(self, character: Character) -> str:
         """根据角色描述构建图片生成 prompt"""
@@ -35,6 +46,31 @@ class CharacterArtistAgent(BaseAgent):
         # 这里简化处理，实际可能需要 join project 表
         # 暂时返回 anime 作为默认
         return "anime"
+
+    async def run_for_character(self, ctx: AgentContext, character: Character) -> None:
+        await self.send_message(
+            ctx,
+            f"🎨 开始为角色 {character.name} 生成形象图...",
+            progress=0.0,
+            is_loading=True,
+        )
+
+        updated = False
+        try:
+            await self._generate_character_image(ctx, character)
+            updated = True
+        except Exception as e:
+            await self.send_message(ctx, f"⚠️ 角色 {character.name} 图片生成失败: {str(e)[:50]}")
+
+        await ctx.session.commit()
+
+        if updated:
+            await self.send_message(
+                ctx,
+                f"✅ 已为角色 {character.name} 生成形象图。",
+                progress=1.0,
+                is_loading=False,
+            )
 
     async def run(self, ctx: AgentContext) -> None:
         # 查找没有图片的角色
@@ -61,17 +97,10 @@ class CharacterArtistAgent(BaseAgent):
                     ctx,
                     f"   正在绘制：{char.name} ({i+1}/{total})",
                     progress=current_progress,
-                    is_loading=True
+                    is_loading=True,
                 )
 
-                image_prompt = self._build_image_prompt(char)
-                image_url = await ctx.image.generate_url(prompt=image_prompt)
-
-                char.image_url = image_url
-                ctx.session.add(char)
-                await ctx.session.flush()  # 确保更新生效
-                # 发送角色更新事件
-                await self.send_character_event(ctx, char, "character_updated")
+                await self._generate_character_image(ctx, char)
                 updated_count += 1
             except Exception as e:
                 # 单个失败不影响其他
@@ -80,3 +109,20 @@ class CharacterArtistAgent(BaseAgent):
         await ctx.session.commit()
         if updated_count > 0:
             await self.send_message(ctx, f"✅ 已为 {updated_count} 个角色生成形象图，接下来将绘制分镜。", progress=1.0)
+
+
+class SingleCharacterArtistAgent(CharacterArtistAgent):
+    name = "character_artist"
+
+    def __init__(self, character_id: int):
+        super().__init__()
+        self.character_id = character_id
+
+    async def run(self, ctx: AgentContext) -> None:
+        character = await ctx.session.get(Character, self.character_id)
+        if not character or character.project_id != ctx.project.id:
+            await self.send_message(ctx, "未找到指定角色，无法重新生成。")
+            await ctx.session.commit()
+            return
+
+        await self.run_for_character(ctx, character)

@@ -14,7 +14,7 @@ from app.db.session import init_db
 from app.ws.manager import ws_manager
 
 # 静态文件目录
-STATIC_DIR = Path(__file__).parent.parent / "static"
+STATIC_DIR = Path(__file__).parent / "static"
 
 
 @asynccontextmanager
@@ -22,6 +22,7 @@ async def lifespan(_: FastAPI):
     # 确保静态文件目录存在
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
     (STATIC_DIR / "videos").mkdir(parents=True, exist_ok=True)
+    (STATIC_DIR / "images").mkdir(parents=True, exist_ok=True)
     await init_db()
     yield
 

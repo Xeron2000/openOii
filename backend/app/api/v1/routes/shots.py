@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.base import AgentContext
+from app.agents.base import AgentContext, TargetIds
 from app.agents.orchestrator import AGENT_STAGE_MAP
 from app.agents.storyboard_artist import StoryboardArtistAgent
 from app.agents.video_generator import VideoGeneratorAgent
@@ -54,6 +54,7 @@ async def _run_agent_plan(
     agent_plan: list[Any],
     settings: Settings,
     ws: ConnectionManager,
+    target_ids: TargetIds | None = None,
 ) -> None:
     try:
         async with async_session_maker() as session:
@@ -71,6 +72,7 @@ async def _run_agent_plan(
                 llm=LLMService(settings),
                 image=ImageService(settings),
                 video=create_video_service(settings),
+                target_ids=target_ids,
             )
 
             await ws.send_event(
@@ -199,6 +201,7 @@ async def regenerate_shot(
         raise HTTPException(status_code=409, detail="Another run is already in progress for this project")
 
     agent_plan: list[Any]
+    target_ids = TargetIds(shot_ids=[shot_id])
     if payload.type == "image":
         delete_file(shot.image_url)
         shot.image_url = None
@@ -215,6 +218,7 @@ async def regenerate_shot(
     else:
         delete_file(shot.video_url)
         shot.video_url = None
+        shot.duration = None
 
         delete_file(project.video_url)
         project.video_url = None
@@ -253,6 +257,7 @@ async def regenerate_shot(
             agent_plan=agent_plan,
             settings=settings,
             ws=ws,
+            target_ids=target_ids,
         )
     )
     task_manager.register(project_id, task)

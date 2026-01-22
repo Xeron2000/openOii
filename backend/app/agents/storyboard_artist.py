@@ -84,16 +84,19 @@ class StoryboardArtistAgent(BaseAgent):
                         exc_info=True,
                     )
 
-        # 查找没有首帧图片的 Shot
-        res = await ctx.session.execute(
+        # 查找没有首帧图片的 Shot（可按目标分镜过滤）
+        query = (
             select(Shot)
             .join(Scene, Shot.scene_id == Scene.id)
             .where(
                 Scene.project_id == ctx.project.id,
-                Shot.image_url.is_(None)
+                Shot.image_url.is_(None),
             )
             .order_by(Scene.order, Shot.order)
         )
+        if ctx.target_ids and ctx.target_ids.shot_ids:
+            query = query.where(Shot.id.in_(ctx.target_ids.shot_ids))
+        res = await ctx.session.execute(query)
         shots = res.scalars().all()
         if not shots:
             await self.send_message(ctx, "所有分镜已有首帧图片。")
@@ -130,6 +133,7 @@ class StoryboardArtistAgent(BaseAgent):
                         ),
                         timeout=480.0  # 8 分钟超时
                     )
+                    image_url = await ctx.image.cache_external_image(image_url)
                 except asyncio.TimeoutError:
                     raise RuntimeError(f"图片生成超时（超过8分钟）")
 
@@ -161,4 +165,3 @@ class StoryboardArtistAgent(BaseAgent):
             await self.send_message(ctx, msg, progress=1.0, is_loading=False)
         elif failed_count > 0:
             await self.send_message(ctx, f"❌ 所有 {failed_count} 个分镜首帧图片生成均失败。", progress=1.0, is_loading=False)
-

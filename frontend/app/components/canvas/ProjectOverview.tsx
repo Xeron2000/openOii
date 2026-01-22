@@ -398,33 +398,36 @@ export function ProjectOverview({ projectId }: ProjectOverviewProps) {
           emptyText="角色正在生成中..."
         >
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {characters.map((char) => (
-              <HoverActionBar key={char.id} actions={getCharacterActions(char)}>
-                <div className="card-doodle p-3 bg-base-100 relative">
-                  {regeneratingCharacterId === char.id && (
-                    <LoadingOverlay text="重新生成中..." />
-                  )}
-                  {char.image_url ? (
-                    <PreviewableImage
-                      src={char.image_url}
-                      alt={char.name}
-                      className="w-full h-32 object-cover rounded-lg mb-2"
-                      onPreview={handleImagePreview}
-                    />
-                  ) : (
-                    <div className="w-full h-32 bg-base-200 rounded-lg flex items-center justify-center mb-2">
-                      <UserIcon className="w-6 h-6" aria-hidden="true" />
-                    </div>
-                  )}
-                  <h4 className="font-bold text-sm">{char.name}</h4>
-                  {char.description && (
-                    <p className="text-xs text-base-content/70 mt-1 line-clamp-2">
-                      {char.description}
-                    </p>
-                  )}
-                </div>
-              </HoverActionBar>
-            ))}
+            {characters.map((char) => {
+              const charImageUrl = getStaticUrl(char.image_url);
+              return (
+                <HoverActionBar key={char.id} actions={getCharacterActions(char)}>
+                  <div className="card-doodle p-3 bg-base-100 relative">
+                    {regeneratingCharacterId === char.id && (
+                      <LoadingOverlay text="重新生成中..." />
+                    )}
+                    {charImageUrl ? (
+                      <PreviewableImage
+                        src={charImageUrl}
+                        alt={char.name}
+                        className="w-full h-32 object-cover rounded-lg mb-2"
+                        onPreview={handleImagePreview}
+                      />
+                    ) : (
+                      <div className="w-full h-32 bg-base-200 rounded-lg flex items-center justify-center mb-2">
+                        <UserIcon className="w-6 h-6" aria-hidden="true" />
+                      </div>
+                    )}
+                    <h4 className="font-bold text-sm">{char.name}</h4>
+                    {char.description && (
+                      <p className="text-xs text-base-content/70 mt-1 line-clamp-2">
+                        {char.description}
+                      </p>
+                    )}
+                  </div>
+                </HoverActionBar>
+              );
+            })}
           </div>
         </Section>
 
@@ -452,58 +455,62 @@ export function ProjectOverview({ projectId }: ProjectOverviewProps) {
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3">
                           {sceneShots
                             .sort((a, b) => a.order - b.order)
-                            .map((shot) => (
-                              <HoverActionBar key={shot.id} actions={getShotActions(shot)}>
-                                <div className="bg-base-200 rounded-lg p-2 hover:bg-base-300 transition-colors relative">
-                                  {regeneratingShotId === shot.id && (
-                                    <LoadingOverlay text={regeneratingShotType === "image" ? "生成图片..." : "生成视频..."} />
-                                  )}
-                                  {shot.image_url && (
-                                    <PreviewableImage
-                                      src={shot.image_url}
-                                      alt={`镜头 ${shot.order}`}
-                                      className="w-full h-24 object-cover rounded"
-                                      onPreview={handleImagePreview}
-                                    />
-                                  )}
-                                  {shot.video_url && (
-                                    <div
-                                      className="relative mt-2 cursor-pointer"
-                                      onClick={() => handleVideoPreview(shot.video_url!, `镜头 ${shot.order}`)}
-                                    >
-                                      <video
-                                        src={shot.video_url}
+                            .map((shot) => {
+                              const shotImageUrl = getStaticUrl(shot.image_url);
+                              const shotVideoUrl = getStaticUrl(shot.video_url);
+                              return (
+                                <HoverActionBar key={shot.id} actions={getShotActions(shot)}>
+                                  <div className="bg-base-200 rounded-lg p-2 hover:bg-base-300 transition-colors relative">
+                                    {regeneratingShotId === shot.id && (
+                                      <LoadingOverlay text={regeneratingShotType === "image" ? "生成图片..." : "生成视频..."} />
+                                    )}
+                                    {shotImageUrl && (
+                                      <PreviewableImage
+                                        src={shotImageUrl}
+                                        alt={`镜头 ${shot.order}`}
                                         className="w-full h-24 object-cover rounded"
-                                        muted
-                                        loop
-                                        onMouseEnter={(e) => e.currentTarget.play()}
-                                        onMouseLeave={(e) => {
-                                          e.currentTarget.pause();
-                                          e.currentTarget.currentTime = 0;
-                                        }}
+                                        onPreview={handleImagePreview}
                                       />
-                                      <span className="absolute top-1 right-1 badge badge-success badge-xs text-success-content">
-                                        视频
-                                      </span>
-                                      <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/30 rounded">
-                                        <span className="text-primary-content text-2xl">▶</span>
+                                    )}
+                                    {shotVideoUrl && (
+                                      <div
+                                        className="relative mt-2 cursor-pointer"
+                                        onClick={() => handleVideoPreview(shotVideoUrl, `镜头 ${shot.order}`)}
+                                      >
+                                        <video
+                                          src={shotVideoUrl}
+                                          className="w-full h-24 object-cover rounded"
+                                          muted
+                                          loop
+                                          onMouseEnter={(e) => e.currentTarget.play()}
+                                          onMouseLeave={(e) => {
+                                            e.currentTarget.pause();
+                                            e.currentTarget.currentTime = 0;
+                                          }}
+                                        />
+                                        <span className="absolute top-1 right-1 badge badge-success badge-xs text-success-content">
+                                          视频
+                                        </span>
+                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/30 rounded">
+                                          <span className="text-primary-content text-2xl">▶</span>
+                                        </div>
                                       </div>
+                                    )}
+                                    {!shotImageUrl && !shotVideoUrl && (
+                                      <div className="w-full h-24 bg-base-300 rounded flex items-center justify-center">
+                                        <RectangleStackIcon className="w-6 h-6" aria-hidden="true" />
+                                      </div>
+                                    )}
+                                    <div className="mt-1">
+                                      <span className="text-xs font-bold">#{shot.order}</span>
+                                      <p className="text-xs text-base-content/70 line-clamp-2">
+                                        {shot.description}
+                                      </p>
                                     </div>
-                                  )}
-                                  {!shot.image_url && !shot.video_url && (
-                                    <div className="w-full h-24 bg-base-300 rounded flex items-center justify-center">
-                                      <RectangleStackIcon className="w-6 h-6" aria-hidden="true" />
-                                    </div>
-                                  )}
-                                  <div className="mt-1">
-                                    <span className="text-xs font-bold">#{shot.order}</span>
-                                    <p className="text-xs text-base-content/70 line-clamp-2">
-                                      {shot.description}
-                                    </p>
                                   </div>
-                                </div>
-                              </HoverActionBar>
-                            ))}
+                                </HoverActionBar>
+                              );
+                            })}
                         </div>
                       )}
                     </div>

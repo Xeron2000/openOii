@@ -14,6 +14,7 @@ dependencies = [
   "asyncpg>=0.29.0",
   "redis>=5.0.0",
   "httpx>=0.27.0",
+  "aiohttp>=3.9.0",
   "anthropic>=0.40.0",
   "pillow>=10.0.0",
 ]

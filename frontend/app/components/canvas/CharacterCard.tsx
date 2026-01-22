@@ -1,5 +1,6 @@
 import type { Character } from "~/types";
 import { UserIcon } from "@heroicons/react/24/outline";
+import { getStaticUrl } from "~/services/api";
 
 interface CharacterCardProps {
   character: Character;
@@ -19,6 +20,7 @@ export function CharacterCard({
     md: "w-32 h-32",
     lg: "w-64 h-64",
   };
+  const imageUrl = getStaticUrl(character.image_url);
 
   return (
     <div
@@ -28,9 +30,9 @@ export function CharacterCard({
       onClick={onClick}
     >
       <figure className={`${sizes[size]} flex items-center justify-center bg-base-100`}>
-        {character.image_url ? (
+        {imageUrl ? (
           <img
-            src={character.image_url}
+            src={imageUrl}
             alt={character.name}
             className="object-cover w-full h-full"
           />

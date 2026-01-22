@@ -2,9 +2,16 @@
 from __future__ import annotations
 
 import io
+import logging
+from pathlib import Path
+from uuid import uuid4
 
 import httpx
 from PIL import Image
+
+from app.services.file_cleaner import STATIC_DIR, get_local_path, is_local_file
+
+logger = logging.getLogger(__name__)
 
 
 class ImageComposer:
@@ -16,6 +23,11 @@ class ImageComposer:
 
     async def _download_image(self, url: str) -> Image.Image:
         """下载图片"""
+        if is_local_file(url):
+            local_path = get_local_path(url)
+            if local_path and local_path.exists():
+                return Image.open(local_path).convert("RGB")
+            raise FileNotFoundError(f"Local image not found: {local_path}")
         async with httpx.AsyncClient() as client:
             response = await client.get(url, timeout=30.0)
             response.raise_for_status()
@@ -110,6 +122,39 @@ class ImageComposer:
         buffer = io.BytesIO()
         canvas.save(buffer, format="PNG")
         return buffer.getvalue()
+
+    async def compose_and_save_reference_image(
+        self,
+        shot_image_url: str,
+        character_image_urls: list[str],
+    ) -> str:
+        """
+        拼接参考图并保存到本地，返回 URL
+
+        Args:
+            shot_image_url: 分镜图片 URL
+            character_image_urls: 角色图片 URL 列表
+
+        Returns:
+            保存后的图片 URL（如 /static/images/composed_xxx.png）
+        """
+        # 生成拼接图
+        image_bytes = await self.compose_reference_image(shot_image_url, character_image_urls)
+
+        # 生成唯一文件名
+        filename = f"composed_{uuid4().hex}.png"
+        images_dir = STATIC_DIR / "images"
+        images_dir.mkdir(parents=True, exist_ok=True)
+        file_path = images_dir / filename
+
+        # 保存到本地
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
+
+        logger.info(f"Saved composed image to {file_path}")
+
+        # 返回 URL
+        return f"/static/images/{filename}"
 
     async def compose_character_reference_image(
         self,

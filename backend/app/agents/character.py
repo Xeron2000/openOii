@@ -79,6 +79,7 @@ class CharacterAgent(BaseAgent):
 
             image_prompt = self._build_image_prompt(item)
             image_url = await ctx.image.generate_url(prompt=image_prompt)
+            image_url = await ctx.image.cache_external_image(image_url)
 
             new_characters.append(
                 Character(

@@ -7,12 +7,15 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import logging
+import mimetypes
 from typing import Any, Literal
 
 import httpx
 
 from app.config import Settings
+from app.services.file_cleaner import get_local_path
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,15 @@ class DoubaoVideoService:
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         }
+
+    def _inline_local_image(self, image_url: str) -> str:
+        local_path = get_local_path(image_url)
+        if not local_path or not local_path.exists():
+            return image_url
+        mime = mimetypes.guess_type(local_path.name)[0] or "image/png"
+        data = base64.b64encode(local_path.read_bytes()).decode("ascii")
+        logger.info("Inlining local image for Doubao request: %s", local_path)
+        return f"data:{mime};base64,{data}"
 
     def _is_retryable_status(self, status_code: int) -> bool:
         """判断是否可重试的 HTTP 状态码"""
@@ -143,6 +155,16 @@ class DoubaoVideoService:
             任务 ID
         """
         url = f"{self.BASE_URL}{self.CREATE_ENDPOINT}"
+
+        if image_url:
+            original_image_url = image_url
+            image_url = self.settings.build_public_url(image_url)
+            if (
+                image_url == original_image_url
+                and self.settings.video_inline_local_images
+                and not image_url.startswith("data:")
+            ):
+                image_url = self._inline_local_image(image_url)
 
         # 构建参数字符串（通过 prompt 文本传递）
         params_str = ""

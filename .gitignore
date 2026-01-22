@@ -13,3 +13,5 @@
 node_modules
 .playwright-mcp
 dist
+static
+*.db

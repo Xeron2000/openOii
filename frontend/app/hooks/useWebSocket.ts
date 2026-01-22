@@ -18,7 +18,6 @@ const globalConnections = new Map<number, WebSocket>();
 export function useProjectWebSocket(projectId: number | null) {
   const reconnectAttempts = useRef(0);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mountedRef = useRef(true);
 
   const clearReconnectTimer = useCallback(() => {
     if (reconnectTimer.current) {
@@ -28,30 +27,24 @@ export function useProjectWebSocket(projectId: number | null) {
   }, []);
 
   const connect = useCallback(() => {
-    if (!projectId || !mountedRef.current) return;
-
-    // 检查是否已有连接
-    const existingWs = globalConnections.get(projectId);
-    if (existingWs && (existingWs.readyState === WebSocket.OPEN || existingWs.readyState === WebSocket.CONNECTING)) {
-      return;
-    }
+    if (!projectId) return;
 
     clearReconnectTimer();
 
-    const ws = new WebSocket(`${WS_BASE}/ws/projects/${projectId}`);
-    globalConnections.set(projectId, ws);
+    // 复用已有连接，必要时创建新连接
+    const existingWs = globalConnections.get(projectId);
+    let ws = existingWs;
+    if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+      ws = new WebSocket(`${WS_BASE}/ws/projects/${projectId}`);
+      globalConnections.set(projectId, ws);
+    }
 
     ws.onopen = () => {
-      if (!mountedRef.current) {
-        ws.close();
-        return;
-      }
       console.log("[WS] 已连接到项目", projectId);
       reconnectAttempts.current = 0;
     };
 
     ws.onmessage = (event) => {
-      if (!mountedRef.current) return;
       try {
         const data: WsEvent = JSON.parse(event.data);
         handleWsEvent(data, useEditorStore.getState());
@@ -64,13 +57,12 @@ export function useProjectWebSocket(projectId: number | null) {
       // 错误会触发 onclose，不需要在这里处理
     };
 
-
     ws.onclose = () => {
       console.log("[WS] 连接断开");
       globalConnections.delete(projectId);
 
-      // 自动重连（仅当组件仍然挂载时）
-      if (mountedRef.current && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+      // 自动重连，避免切换页面后连接中断
+      if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts.current++;
         console.log(`[WS] ${RECONNECT_DELAY / 1000}秒后尝试重连 (${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})`);
         reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY);
@@ -99,17 +91,9 @@ export function useProjectWebSocket(projectId: number | null) {
   }, [projectId]);
 
   useEffect(() => {
-    mountedRef.current = true;
     reconnectAttempts.current = 0;
     connect();
-
-    return () => {
-      mountedRef.current = false;
-      clearReconnectTimer();
-      // 注意：不在这里关闭连接，因为 StrictMode 会导致快速卸载/重新挂载
-      // 连接会在下次 connect 时被复用
-    };
-  }, [projectId, connect, clearReconnectTimer]);
+  }, [projectId, connect]);
 
   return { send, disconnect, reconnect: connect };
 }

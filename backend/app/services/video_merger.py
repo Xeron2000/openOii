@@ -17,7 +17,7 @@ import httpx
 logger = logging.getLogger(__name__)
 
 # 输出目录（相对于 backend 目录）
-OUTPUT_DIR = Path(__file__).parent.parent.parent / "static" / "videos"
+OUTPUT_DIR = Path(__file__).parent.parent / "static" / "videos"
 
 
 class VideoMergerService:
@@ -30,7 +30,7 @@ class VideoMergerService:
         """初始化视频拼接服务
 
         Args:
-            output_dir: 输出目录，默认为 backend/static/videos
+            output_dir: 输出目录，默认为 backend/app/static/videos
         """
         self.output_dir = output_dir or OUTPUT_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
