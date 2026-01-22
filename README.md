@@ -452,7 +452,11 @@ chore: 构建/工具链相关
 
 ## 📮 联系方式
 
-如有问题或建议，欢迎提交 [Issue](https://github.com/Xeron2000/openOii/issues)
+如有问题或建议，欢迎通过以下方式联系：
+
+- 📝 提交 [Issue](https://github.com/Xeron2000/openOii/issues)
+- 💬 [Telegram](https://t.me/xeron23)
+- 📧 [Email](mailto:xeron2333@gmail.com)
 
 ---
 
