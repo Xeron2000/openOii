@@ -32,15 +32,7 @@ async def generate_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    res = await session.execute(
-        select(AgentRun)
-        .where(AgentRun.project_id == project_id)
-        .where(AgentRun.status.in_(["queued", "running"]))
-        .limit(1)
-    )
-    if res.scalars().first() is not None:
-        raise HTTPException(status_code=409, detail="Another run is already in progress for this project")
-
+    # 并发限制已移除，允许多个任务同时运行
     run = AgentRun(project_id=project_id, status="running", current_agent="orchestrator", progress=0.0)
     session.add(run)
     await session.commit()
@@ -120,15 +112,7 @@ async def feedback_project(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    res = await session.execute(
-        select(AgentRun)
-        .where(AgentRun.project_id == project_id)
-        .where(AgentRun.status.in_(["queued", "running"]))
-        .limit(1)
-    )
-    if res.scalars().first() is not None:
-        raise HTTPException(status_code=409, detail="Another run is already in progress for this project")
-
+    # 并发限制已移除，允许多个任务同时运行
     run = AgentRun(project_id=project_id, status="queued", current_agent="review", progress=0.0)
     session.add(run)
     await session.commit()
