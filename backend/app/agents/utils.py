@@ -4,6 +4,33 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, UTC
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from typing import Any
+
+def build_character_context(characters: list[Any]) -> str:
+    """构建角色上下文描述（用于 prompt 拼接）
+
+    Args:
+        characters: Character 对象列表
+
+    Returns:
+        格式化的角色描述字符串，如 "Characters: Alice: red hair; Bob: tall"
+        如果没有角色则返回空字符串
+    """
+    if not characters:
+        return ""
+
+    char_descriptions = []
+    for char in characters:
+        char_info = f"{char.name}: {char.description}" if char.description else char.name
+        char_descriptions.append(char_info)
+
+    if not char_descriptions:
+        return ""
+
+    return "Characters: " + "; ".join(char_descriptions)
 
 
 def utcnow() -> datetime:

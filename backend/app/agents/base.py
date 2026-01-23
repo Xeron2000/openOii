@@ -139,6 +139,66 @@ class BaseAgent:
             },
         )
 
+    async def generate_and_cache_image(
+        self,
+        ctx: AgentContext,
+        prompt: str,
+        image_bytes: bytes | None = None,
+        **kwargs: Any,
+    ) -> str:
+        """生成图片并缓存到本地
+
+        Args:
+            ctx: Agent 上下文
+            prompt: 图片生成 prompt
+            image_bytes: 可选的参考图片字节流（用于 I2I）
+            **kwargs: 传递给 generate_url 的额外参数
+
+        Returns:
+            缓存后的图片 URL
+        """
+        url = await ctx.image.generate_url(
+            prompt=prompt,
+            image_bytes=image_bytes,
+            **kwargs
+        )
+        return await ctx.image.cache_external_image(url)
+
+    async def get_project_characters(self, ctx: AgentContext) -> list[Any]:
+        """获取项目的所有角色
+
+        Args:
+            ctx: Agent 上下文
+
+        Returns:
+            角色列表
+        """
+        from app.models.project import Character
+        from sqlalchemy import select
+
+        res = await ctx.session.execute(
+            select(Character).where(Character.project_id == ctx.project.id)
+        )
+        return list(res.scalars().all())
+
+    async def send_progress_batch(
+        self,
+        ctx: AgentContext,
+        total: int,
+        current: int,
+        message: str,
+    ) -> None:
+        """发送批处理进度消息
+
+        Args:
+            ctx: Agent 上下文
+            total: 总数
+            current: 当前索引（从 0 开始）
+            message: 进度消息
+        """
+        progress = current / total if total > 0 else 0.0
+        await self.send_message(ctx, message, progress=progress, is_loading=True)
+
     async def call_llm(
         self,
         ctx: AgentContext,

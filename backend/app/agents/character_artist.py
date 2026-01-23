@@ -13,8 +13,7 @@ class CharacterArtistAgent(BaseAgent):
     async def _generate_character_image(self, ctx: AgentContext, character: Character) -> None:
         # 生成图片 URL
         image_prompt = self._build_image_prompt(character)
-        external_url = await ctx.image.generate_url(prompt=image_prompt)
-        external_url = await ctx.image.cache_external_image(external_url)
+        external_url = await self.generate_and_cache_image(ctx, prompt=image_prompt)
 
         # 直接保存外部 URL（不下载）
         character.image_url = external_url
@@ -26,26 +25,8 @@ class CharacterArtistAgent(BaseAgent):
 
     def _build_image_prompt(self, character: Character) -> str:
         """根据角色描述构建图片生成 prompt"""
-        style_hints = {
-            "anime": "anime style, manga character design, clean lines, vibrant colors",
-            "realistic": "realistic style, detailed character art, cinematic lighting",
-        }
-        style_hint = style_hints.get(self._project_style(character), "")
-
-        # 使用角色的 description 作为主要 prompt
-        desc = character.description or character.name
-        parts: list[str] = [desc.strip()]
-
-        if style_hint:
-            parts.append(style_hint)
-
-        return ", ".join(parts)
-
-    def _project_style(self, character: Character) -> str:
-        """获取项目风格（从 character 关联的 project）"""
-        # 这里简化处理，实际可能需要 join project 表
-        # 暂时返回 anime 作为默认
-        return "anime"
+        # 完全信任 Agent 生成的描述，不追加硬编码风格
+        return character.description or character.name
 
     async def run_for_character(self, ctx: AgentContext, character: Character) -> None:
         await self.send_message(

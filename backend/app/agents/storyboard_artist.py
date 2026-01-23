@@ -6,6 +6,7 @@ import logging
 from sqlalchemy import select
 
 from app.agents.base import AgentContext, BaseAgent
+from app.agents.utils import build_character_context
 from app.models.project import Character, Scene, Shot
 from app.services.image_composer import ImageComposer
 
@@ -22,46 +23,22 @@ class StoryboardArtistAgent(BaseAgent):
 
     def _build_image_prompt(self, shot: Shot, characters: list[Character]) -> str:
         """构建首帧图片生成 prompt"""
-        style_hints = {
-            "anime": "anime style, manga key visual, clean lines, vibrant colors",
-            "realistic": "realistic style, cinematic still, detailed composition",
-        }
-
         # 优先使用 image_prompt，否则使用 description
         desc = shot.image_prompt or shot.description
+        parts = [desc.strip()]
 
-        parts: list[str] = [desc.strip()]
-
-        # 添加角色外观描述（保持一致性）
-        if characters:
-            char_descriptions = []
-            for char in characters:
-                # 提取角色的关键外观特征
-                char_info = f"{char.name}: {char.description}" if char.description else char.name
-                char_descriptions.append(char_info)
-            if char_descriptions:
-                parts.append("Characters: " + "; ".join(char_descriptions))
-
-        # 添加风格提示
-        style_hint = style_hints.get(self._project_style(), "")
-        if style_hint:
-            parts.append(style_hint)
+        # 使用工具函数构建角色上下文
+        char_context = build_character_context(characters)
+        if char_context:
+            parts.append(char_context)
 
         return ", ".join(parts)
-
-    def _project_style(self) -> str:
-        """获取项目风格"""
-        # 简化处理，实际可以从 project 获取
-        return "anime"
 
     async def run(self, ctx: AgentContext) -> None:
         use_i2i = ctx.settings.use_i2i()
 
-        # 查询项目的所有角色（用于保持视觉一致性）
-        char_res = await ctx.session.execute(
-            select(Character).where(Character.project_id == ctx.project.id)
-        )
-        characters = list(char_res.scalars().all())
+        # 使用基类方法查询项目角色
+        characters = await self.get_project_characters(ctx)
 
         # 收集有图片的角色 URL（用于 I2I 参考图）
         char_image_urls = [c.image_url for c in characters if c.image_url]
@@ -111,15 +88,12 @@ class StoryboardArtistAgent(BaseAgent):
 
         for i, shot in enumerate(shots):
             try:
-                # 计算进度（当前索引 / 总数）
-                current_progress = i / total
-
-                # 发送进度更新消息
-                await self.send_message(
+                # 使用基类方法发送进度消息
+                await self.send_progress_batch(
                     ctx,
-                    f"   正在绘制分镜 {i+1}/{total}...",
-                    progress=current_progress,
-                    is_loading=True
+                    total=total,
+                    current=i,
+                    message=f"   正在绘制分镜 {i+1}/{total}...",
                 )
 
                 image_prompt = self._build_image_prompt(shot, characters)
@@ -127,13 +101,13 @@ class StoryboardArtistAgent(BaseAgent):
                 # 添加超时机制（8分钟）
                 try:
                     image_url = await asyncio.wait_for(
-                        ctx.image.generate_url(
+                        self.generate_and_cache_image(
+                            ctx,
                             prompt=image_prompt,
                             image_bytes=reference_image_bytes if use_i2i else None,
                         ),
                         timeout=480.0  # 8 分钟超时
                     )
-                    image_url = await ctx.image.cache_external_image(image_url)
                 except asyncio.TimeoutError:
                     raise RuntimeError(f"图片生成超时（超过8分钟）")
 

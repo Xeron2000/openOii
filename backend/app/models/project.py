@@ -14,7 +14,7 @@ class Project(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
     story: Optional[str] = None
-    style: Optional[str] = None
+    style: str = Field(default="anime")
     summary: Optional[str] = None   # 剧情摘要
     video_url: Optional[str] = None  # 最终拼接视频
     status: str = Field(default="draft")

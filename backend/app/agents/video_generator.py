@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy import select
 
 from app.agents.base import AgentContext, BaseAgent
+from app.agents.utils import build_character_context
 from app.models.project import Character, Scene, Shot
 from app.services.doubao_video import DoubaoVideoService
 from app.services.image_composer import ImageComposer
@@ -20,33 +21,14 @@ class VideoGeneratorAgent(BaseAgent):
         """构建视频生成 prompt"""
         # 优先使用 prompt（由 Scriptwriter 生成的 video_prompt）
         desc = shot.prompt or shot.description
+        parts = [desc.strip()]
 
-        style_hints = {
-            "anime": "anime style, smooth animation, manga-style motion",
-            "realistic": "realistic style, smooth camera movement, cinematic",
-        }
-
-        parts: list[str] = [desc.strip()]
-
-        # 添加角色外观描述（保持一致性）
-        if characters:
-            char_descriptions = []
-            for char in characters:
-                # 提取角色的关键外观特征
-                char_info = f"{char.name}: {char.description}" if char.description else char.name
-                char_descriptions.append(char_info)
-            if char_descriptions:
-                parts.append("Characters: " + "; ".join(char_descriptions))
-
-        style_hint = style_hints.get(self._project_style(), "")
-        if style_hint:
-            parts.append(style_hint)
+        # 使用工具函数构建角色上下文
+        char_context = build_character_context(characters)
+        if char_context:
+            parts.append(char_context)
 
         return ", ".join(parts)
-
-    def _project_style(self) -> str:
-        """获取项目风格"""
-        return "anime"
 
     def _get_duration(self, shot: Shot, default_duration: float) -> float:
         """获取视频时长（秒）"""
@@ -55,11 +37,8 @@ class VideoGeneratorAgent(BaseAgent):
         return default_duration
 
     async def run(self, ctx: AgentContext) -> None:
-        # 查询项目的所有角色（用于保持视觉一致性）
-        char_res = await ctx.session.execute(
-            select(Character).where(Character.project_id == ctx.project.id)
-        )
-        characters = list(char_res.scalars().all())
+        # 使用基类方法查询项目角色
+        characters = await self.get_project_characters(ctx)
 
         # 查找没有视频的 Shot（可按目标分镜过滤）
         query = (
@@ -102,15 +81,12 @@ class VideoGeneratorAgent(BaseAgent):
 
         for i, shot in enumerate(shots):
             try:
-                # 计算进度（当前索引 / 总数）
-                current_progress = i / total
-
-                # 发送进度更新消息
-                await self.send_message(
+                # 使用基类方法发送进度消息
+                await self.send_progress_batch(
                     ctx,
-                    f"   正在生成视频 {i+1}/{total}...",
-                    progress=current_progress,
-                    is_loading=True
+                    total=total,
+                    current=i,
+                    message=f"   正在生成视频 {i+1}/{total}...",
                 )
 
                 video_prompt = self._build_video_prompt(shot, characters)
