@@ -1,6 +1,3 @@
-import { Link, useParams, useSearchParams } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef } from "react";
 import {
   Bars3Icon,
   ClockIcon,
@@ -9,15 +6,19 @@ import {
   PencilIcon,
   StopIcon,
 } from "@heroicons/react/24/outline";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { ChatPanel } from "~/components/chat/ChatPanel";
+import { Sidebar } from "~/components/layout/Sidebar";
+import { StageView } from "~/components/layout/StageView";
+import { SettingsModal } from "~/components/settings/SettingsModal";
+import { Button } from "~/components/ui/Button";
+import { Card } from "~/components/ui/Card";
+import { useProjectWebSocket } from "~/hooks/useWebSocket";
 import { projectsApi } from "~/services/api";
 import { useEditorStore } from "~/stores/editorStore";
 import { useSidebarStore } from "~/stores/sidebarStore";
-import { useProjectWebSocket } from "~/hooks/useWebSocket";
-import { Button } from "~/components/ui/Button";
-import { Card } from "~/components/ui/Card";
-import { ChatPanel } from "~/components/chat/ChatPanel";
-import { StageView } from "~/components/layout/StageView";
-import { Sidebar } from "~/components/layout/Sidebar";
 
 // 生成唯一消息 ID
 let localMessageIdCounter = 0;
@@ -276,7 +277,12 @@ export function ProjectPage() {
 
   useEffect(() => {
     const autoStart = searchParams.get("autoStart");
-    if (autoStart === "true" && project && !autoStartTriggered.current && !store.isGenerating) {
+    if (
+      autoStart === "true" &&
+      project &&
+      !autoStartTriggered.current &&
+      !store.isGenerating
+    ) {
       autoStartTriggered.current = true;
       setSearchParams({}, { replace: true });
       store.clearMessages();
@@ -289,7 +295,9 @@ export function ProjectPage() {
     return (
       <div className="min-h-screen flex items-center justify-center flex-col gap-4 bg-base-100">
         <PencilIcon className="w-6 h-6 animate-bounce" aria-hidden="true" />
-        <p className="font-sketch text-2xl text-base-content/80">正在加载项目...</p>
+        <p className="font-sketch text-2xl text-base-content/80">
+          正在加载项目...
+        </p>
       </div>
     );
   }
@@ -298,7 +306,10 @@ export function ProjectPage() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-base-100">
         <Card className="text-center">
-          <FaceFrownIcon className="w-6 h-6 mx-auto mb-4 animate-wiggle" aria-hidden="true" />
+          <FaceFrownIcon
+            className="w-6 h-6 mx-auto mb-4 animate-wiggle"
+            aria-hidden="true"
+          />
           <h1 className="text-2xl font-heading font-bold mb-4">项目未找到</h1>
           <Link to="/">
             <Button variant="primary">返回首页</Button>
@@ -311,7 +322,12 @@ export function ProjectPage() {
   return (
     <>
       <Sidebar />
-      <div className={`h-screen flex flex-col bg-base-100 font-sans transition-all duration-300 ease-in-out ${sidebarOpen ? "ml-72" : "ml-0"}`}>
+      <SettingsModal />
+      <div
+        className={`h-screen flex flex-col bg-base-100 font-sans transition-all duration-300 ease-in-out ${
+          sidebarOpen ? "ml-72" : "ml-0"
+        }`}
+      >
         <header className="flex-shrink-0 bg-base-100/80 backdrop-blur-sm border-b-3 border-black px-4 z-10">
           <div className="flex items-center h-14">
             <div className="w-10">
@@ -327,29 +343,32 @@ export function ProjectPage() {
                 </Button>
               )}
             </div>
-            <h1 className="flex-1 text-lg font-heading font-semibold truncate text-center" title={project.title}>
+            <h1
+              className="flex-1 text-lg font-heading font-semibold truncate text-center"
+              title={project.title}
+            >
               {project.title}
             </h1>
             <div className="w-10" />
           </div>
         </header>
 
-      <main className="flex-1 flex overflow-hidden p-4 gap-4">
-        <div className="w-1/3 min-w-[320px] max-w-[480px] h-full flex flex-col">
-          <ChatPanel
-            onSendFeedback={handleFeedback}
-            onConfirm={handleConfirm}
-            onGenerate={handleGenerate}
-            onCancel={handleCancel}
-            isGenerating={store.isGenerating || generateMutation.isPending}
-          />
-        </div>
+        <main className="flex-1 flex overflow-hidden p-4 gap-4">
+          <div className="w-1/3 min-w-[320px] max-w-[480px] h-full flex flex-col">
+            <ChatPanel
+              onSendFeedback={handleFeedback}
+              onConfirm={handleConfirm}
+              onGenerate={handleGenerate}
+              onCancel={handleCancel}
+              isGenerating={store.isGenerating || generateMutation.isPending}
+            />
+          </div>
 
-        <div className="flex-1 overflow-hidden">
-          <StageView projectId={projectId} />
-        </div>
-      </main>
-    </div>
+          <div className="flex-1 overflow-hidden">
+            <StageView projectId={projectId} />
+          </div>
+        </main>
+      </div>
     </>
   );
 }

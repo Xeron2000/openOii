@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlmodel import SQLModel
 
 from app.config import get_settings
-from app.models import agent_run, message, project  # noqa: F401
+from app.models import agent_run, config_item, message, project  # noqa: F401
 
 
 def _patch_aiosqlite_event_loop() -> None:
@@ -45,11 +45,16 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
-    # 清理服务重启前遗留的 running/queued 状态的 run（它们已经不会继续执行了）
     async with async_session_maker() as session:
+        from app.services.config_service import ConfigService
         from app.models.agent_run import AgentRun
         from app.models.project import Project
 
+        config_service = ConfigService(session)
+        await config_service.ensure_initialized()
+        await config_service.apply_settings_overrides()
+
+        # 清理服务重启前遗留的 running/queued 状态的 run（它们已经不会继续执行了）
         await session.execute(
             update(AgentRun)
             .where(AgentRun.status.in_(["queued", "running"]))

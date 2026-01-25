@@ -134,3 +134,23 @@ export const scenesApi = {
       method: "DELETE",
     }),
 };
+
+// Config API
+export const configApi = {
+  get: () => fetchApi<import("~/types").ConfigItem[]>("/api/v1/config"),
+  update: (config: Record<string, import("~/types").ConfigValue>) =>
+    fetchApi<{ updated: number; skipped: number; restart_required: boolean; restart_keys: string[]; message: string }>("/api/v1/config", {
+      method: "PUT",
+      body: JSON.stringify({ configs: config }),
+    }),
+  testConnection: (service: "llm" | "image" | "video", configOverrides?: Record<string, string | null>) =>
+    fetchApi<{ success: boolean; message: string; details: string | null }>("/api/v1/config/test-connection", {
+      method: "POST",
+      body: JSON.stringify({ service, config_overrides: configOverrides }),
+    }),
+  revealValue: (key: string) =>
+    fetchApi<{ key: string; value: string | null }>("/api/v1/config/reveal", {
+      method: "POST",
+      body: JSON.stringify({ key }),
+    }),
+};

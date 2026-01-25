@@ -1,29 +1,39 @@
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { projectsApi } from "~/services/api";
-import { useSidebarStore } from "~/stores/sidebarStore";
 import {
   Bars3Icon,
+  ChatBubbleLeftRightIcon,
+  Cog6ToothIcon,
   FilmIcon,
   MoonIcon,
   PlusIcon,
   SparklesIcon,
   SunIcon,
   TrashIcon,
-  ChatBubbleLeftRightIcon,
 } from "@heroicons/react/24/outline";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ConfirmModal } from "~/components/ui/ConfirmModal";
+import { projectsApi } from "~/services/api";
+import { useSettingsStore } from "~/stores/settingsStore";
+import { useSidebarStore } from "~/stores/sidebarStore";
 import { useThemeStore } from "~/stores/themeStore";
 import type { Project } from "~/types";
 
 export function Sidebar() {
   const { isOpen, toggle } = useSidebarStore();
   const { theme, toggleTheme } = useThemeStore();
+  const { openModal: openSettingsModal } = useSettingsStore();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
+
+  // 调试：添加点击处理函数
+  const handleSettingsClick = () => {
+    console.log("设置按钮被点击！");
+    console.log("openSettingsModal 函数:", openSettingsModal);
+    openSettingsModal();
+  };
 
   const { data: projects, isLoading } = useQuery({
     queryKey: ["projects"],
@@ -174,22 +184,36 @@ export function Sidebar() {
 
         {/* 底部 */}
         <div className="p-3 border-t-3 border-black">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-base-content/50">主题</span>
-            <button
-              onClick={toggleTheme}
-              className="p-2 hover:bg-base-200 rounded-lg transition-colors cursor-pointer"
-              title={theme === "doodle" ? "切换到深色模式" : "切换到浅色模式"}
-              aria-label={theme === "doodle" ? "切换到深色模式" : "切换到浅色模式"}
-            >
-              {theme === "doodle" ? (
-                <MoonIcon className="w-5 h-5" />
-              ) : (
-                <SunIcon className="w-5 h-5" />
-              )}
-            </button>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={handleSettingsClick}
+                className="p-2 hover:bg-base-200 rounded-lg transition-colors cursor-pointer"
+                title="系统设置"
+                aria-label="系统设置"
+              >
+                <Cog6ToothIcon className="w-5 h-5 text-accent" />
+              </button>
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-base-content/50">主题</span>
+              <button
+                onClick={toggleTheme}
+                className="p-2 hover:bg-base-200 rounded-lg transition-colors cursor-pointer"
+                title={theme === "doodle" ? "切换到深色模式" : "切换到浅色模式"}
+                aria-label={
+                  theme === "doodle" ? "切换到深色模式" : "切换到浅色模式"
+                }
+              >
+                {theme === "doodle" ? (
+                  <MoonIcon className="w-5 h-5" />
+                ) : (
+                  <SunIcon className="w-5 h-5" />
+                )}
+              </button>
+            </div>
           </div>
-          <div className="text-xs text-center text-base-content/50 font-sketch flex items-center justify-center gap-1">
+          <div className="text-xs text-center text-base-content/50 font-sketch flex items-center justify-center gap-1 mt-2">
             <span>openOii - AI 漫剧生成器</span>
             <SparklesIcon className="w-5 h-5" aria-hidden="true" />
           </div>

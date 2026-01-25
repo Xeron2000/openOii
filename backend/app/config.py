@@ -18,6 +18,10 @@ class Settings(BaseSettings):
 
     api_v1_prefix: str = "/api/v1"
     cors_origins: list[str] = Field(default_factory=lambda: ["*"])
+    admin_token: str | None = Field(
+        default=None,
+        description="Admin token for configuration updates (sent via X-Admin-Token header)",
+    )
 
     # 数据库（默认使用 PostgreSQL）
     database_url: str = Field(
@@ -181,6 +185,17 @@ class Settings(BaseSettings):
             return path
         normalized = path if path.startswith("/") else f"/{path}"
         return f"{self.public_base_url.rstrip('/')}{normalized}"
+
+
+def apply_settings_overrides(overrides: dict[str, Any]) -> None:
+    if not overrides:
+        return
+    settings = get_settings()
+    data = settings.model_dump()
+    data.update(overrides)
+    updated = Settings.model_validate(data)
+    for field_name in settings.model_fields:
+        setattr(settings, field_name, getattr(updated, field_name))
 
 
 @lru_cache

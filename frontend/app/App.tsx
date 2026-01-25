@@ -6,6 +6,7 @@ import { HomePage } from "./pages/HomePage";
 import { NewProjectPage } from "./pages/NewProjectPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { ProjectPage } from "./pages/ProjectPage";
+import { SettingsModal } from "./components/settings/SettingsModal";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,6 +27,8 @@ export function App() {
           <Route path="/project/new" element={<NewProjectPage />} />
           <Route path="/project/:id" element={<ProjectPage />} />
         </Routes>
+        {/* 全局设置弹窗 - 在所有页面都可用 */}
+        <SettingsModal />
       </BrowserRouter>
     </QueryClientProvider>
   );

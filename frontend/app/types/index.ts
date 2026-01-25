@@ -107,3 +107,23 @@ export interface Message {
 
 // 工作流阶段类型
 export type WorkflowStage = "ideate" | "visualize" | "animate" | "deploy";
+
+// Config types
+export type ConfigValue = string | number | boolean | null;
+
+// 后端 API 返回的配置项格式
+export interface ConfigItem {
+  key: string;
+  value: string | null;
+  is_sensitive: boolean;
+  is_masked: boolean;
+  source: "db" | "env";
+}
+
+export interface ConfigSection {
+  key: string;
+  title: string;
+  items: ConfigItem[];
+}
+
+export type AppConfig = ConfigItem[];
