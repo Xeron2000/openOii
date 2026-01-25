@@ -3,6 +3,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.agent_run import AgentMessage, AgentRun
+from app.models.config_item import ConfigItem
 from app.models.message import Message
 from app.models.project import Character, Project, Scene, Shot
 
@@ -135,3 +136,20 @@ async def create_shot(
     await session.commit()
     await session.refresh(shot)
     return shot
+
+
+async def create_config_item(
+    session: AsyncSession,
+    key: str = "TEST_CONFIG_KEY",
+    value: str = "test_value",
+    is_sensitive: bool = False,
+) -> ConfigItem:
+    config = ConfigItem(
+        key=key,
+        value=value,
+        is_sensitive=is_sensitive,
+    )
+    session.add(config)
+    await session.commit()
+    await session.refresh(config)
+    return config

@@ -75,7 +75,8 @@ export type WsEventType =
   | "shot_updated"
   | "shot_deleted"
   | "project_updated"
-  | "data_cleared";
+  | "data_cleared"
+  | "error";
 
 export interface WsEvent {
   type: WsEventType;

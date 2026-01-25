@@ -13,6 +13,8 @@ import {
   PaintBrushIcon,
   SparklesIcon,
 } from "@heroicons/react/24/outline";
+import { toast } from "~/utils/toast";
+import { ApiError } from "~/types/errors";
 
 export function NewProjectPage() {
   const navigate = useNavigate();
@@ -28,8 +30,25 @@ export function NewProjectPage() {
     mutationFn: projectsApi.create,
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success({
+        title: "创建成功",
+        message: "项目已创建，正在跳转...",
+      });
       // 自动开始生成
       navigate(`/project/${project.id}?autoStart=true`);
+    },
+    onError: (error: Error | ApiError) => {
+      const apiError = error instanceof ApiError ? error : null;
+      toast.error({
+        title: "创建失败",
+        message: apiError?.message || error.message || "未知错误",
+        actions: [
+          {
+            label: "重试",
+            onClick: () => createMutation.mutate(formData),
+          },
+        ],
+      });
     },
   });
 

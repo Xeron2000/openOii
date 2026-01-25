@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useEditorStore } from "~/stores/editorStore";
 import type { WsEvent, WorkflowStage } from "~/types";
+import { toast } from "~/utils/toast";
 
 const WS_BASE = import.meta.env.VITE_WS_URL || "ws://localhost:18765";
 const RECONNECT_DELAY = 3000;
@@ -42,6 +43,12 @@ export function useProjectWebSocket(projectId: number | null) {
     ws.onopen = () => {
       console.log("[WS] 已连接到项目", projectId);
       reconnectAttempts.current = 0;
+      // 如果之前显示了断开提示，现在清除
+      toast.success({
+        title: "连接成功",
+        message: "实时更新已恢复",
+        duration: 2000,
+      });
     };
 
     ws.onmessage = (event) => {
@@ -50,11 +57,30 @@ export function useProjectWebSocket(projectId: number | null) {
         handleWsEvent(data, useEditorStore.getState());
       } catch (e) {
         console.error("[WS] 解析错误:", e);
+        toast.error({
+          title: "消息解析失败",
+          message: "收到无效的服务器消息",
+          duration: 3000,
+        });
       }
     };
 
-    ws.onerror = () => {
-      // 错误会触发 onclose，不需要在这里处理
+    ws.onerror = (error) => {
+      console.error("[WS] 连接错误:", error);
+      toast.error({
+        title: "连接错误",
+        message: "WebSocket 连接出现问题",
+        duration: 0, // 不自动消失
+        actions: [
+          {
+            label: "重新连接",
+            onClick: () => {
+              reconnectAttempts.current = 0;
+              connect();
+            },
+          },
+        ],
+      });
     };
 
     ws.onclose = () => {
@@ -65,7 +91,26 @@ export function useProjectWebSocket(projectId: number | null) {
       if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
         reconnectAttempts.current++;
         console.log(`[WS] ${RECONNECT_DELAY / 1000}秒后尝试重连 (${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})`);
+
+        toast.warning({
+          title: "连接已断开",
+          message: `正在尝试重新连接... (${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})`,
+          duration: RECONNECT_DELAY,
+        });
+
         reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY);
+      } else {
+        toast.error({
+          title: "连接失败",
+          message: "无法连接到服务器，请检查网络或刷新页面",
+          duration: 0, // 不自动消失
+          actions: [
+            {
+              label: "刷新页面",
+              onClick: () => window.location.reload(),
+            },
+          ],
+        });
       }
     };
   }, [projectId, clearReconnectTimer]);
@@ -265,6 +310,21 @@ function handleWsEvent(event: WsEvent, store: ReturnType<typeof useEditorStore.g
         role: "error",
         content: `生成失败: ${event.data.error}`,
         timestamp: new Date().toISOString(),
+      });
+      // 显示 Toast 通知
+      toast.error({
+        title: "生成失败",
+        message: (event.data.error as string) || "未知错误",
+        duration: 5000,
+      });
+      break;
+    case "error":
+      // 处理 WebSocket 错误事件
+      console.error("[WS] 服务器错误:", event.data);
+      toast.error({
+        title: "服务器错误",
+        message: (event.data.message as string) || "发生未知错误",
+        details: import.meta.env.DEV ? (event.data.code as string) : undefined,
       });
       break;
     case "character_created":

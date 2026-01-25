@@ -1,3 +1,5 @@
+import { ApiError } from "~/types/errors";
+
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:18765";
 
 /**
@@ -19,21 +21,57 @@ async function fetchApi<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`API Error: ${res.status} ${res.statusText}`);
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+      },
+    });
+
+    // 处理 204 No Content 响应
+    if (res.status === 204 || res.headers.get("content-length") === "0") {
+      return undefined as T;
+    }
+
+    // 尝试解析响应体
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      // 解析后端返回的结构化错误
+      const errorData = data.error || {};
+      throw new ApiError({
+        code: errorData.code || "API_ERROR",
+        message: errorData.message || res.statusText || "请求失败",
+        status: res.status,
+        details: errorData.details,
+        request: {
+          method: options?.method || "GET",
+          url: endpoint,
+        },
+        response: data,
+      });
+    }
+
+    return data;
+  } catch (error) {
+    // 如果已经是 ApiError，直接抛出
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    // 网络错误或其他错误
+    throw new ApiError({
+      code: "NETWORK_ERROR",
+      message: "网络连接失败，请检查您的网络设置",
+      details: { originalError: String(error) },
+      request: {
+        method: options?.method || "GET",
+        url: endpoint,
+      },
+    });
   }
-  // 处理 204 No Content 响应
-  if (res.status === 204 || res.headers.get("content-length") === "0") {
-    return undefined as T;
-  }
-  return res.json();
 }
 
 // Projects API

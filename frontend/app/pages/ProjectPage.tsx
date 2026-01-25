@@ -1,7 +1,5 @@
 import {
   Bars3Icon,
-  ClockIcon,
-  ExclamationTriangleIcon,
   FaceFrownIcon,
   PencilIcon,
   StopIcon,
@@ -19,12 +17,8 @@ import { useProjectWebSocket } from "~/hooks/useWebSocket";
 import { projectsApi } from "~/services/api";
 import { useEditorStore } from "~/stores/editorStore";
 import { useSidebarStore } from "~/stores/sidebarStore";
-
-// 生成唯一消息 ID
-let localMessageIdCounter = 0;
-function generateLocalMessageId(): string {
-  return `local_${Date.now()}_${++localMessageIdCounter}`;
-}
+import { toast } from "~/utils/toast";
+import { ApiError } from "~/types/errors";
 
 export function ProjectPage() {
   const { id } = useParams<{ id: string }>();
@@ -38,11 +32,29 @@ export function ProjectPage() {
 
   const { send } = useProjectWebSocket(projectId);
 
-  const { data: project, isLoading: projectLoading } = useQuery({
+  const { data: project, isLoading: projectLoading, error: projectError } = useQuery({
     queryKey: ["project", projectId],
     queryFn: () => projectsApi.get(projectId),
     enabled: projectId > 0,
+    retry: 1,
   });
+
+  // 显示项目加载错误
+  useEffect(() => {
+    if (projectError) {
+      const apiError = projectError instanceof ApiError ? projectError : null;
+      toast.error({
+        title: "加载项目失败",
+        message: apiError?.message || "无法获取项目信息",
+        actions: [
+          {
+            label: "重试",
+            onClick: () => queryClient.invalidateQueries({ queryKey: ["project", projectId] }),
+          },
+        ],
+      });
+    }
+  }, [projectError, projectId, queryClient]);
 
   const { data: characters } = useQuery({
     queryKey: ["characters", projectId],
@@ -147,9 +159,12 @@ export function ProjectPage() {
       // 重置重试计数
       retryCount.current = 0;
     },
-    onError: async (error: Error) => {
+    onError: async (error: Error | ApiError) => {
+      const apiError = error instanceof ApiError ? error : null;
+      const isConflict = apiError?.status === 409 || error.message.includes("409");
+
       // 如果是 409 冲突，自动取消并重试（最多重试 1 次）
-      if (error.message.includes("409") && retryCount.current < 1) {
+      if (isConflict && retryCount.current < 1) {
         retryCount.current += 1;
         try {
           await projectsApi.cancel(projectId);
@@ -158,25 +173,24 @@ export function ProjectPage() {
         } catch {
           // 取消失败，提示用户
           retryCount.current = 0;
-          store.addMessage({
-            id: generateLocalMessageId(),
-            agent: "system",
-            role: "system",
-            content: "有一个任务正在运行中，请稍后再试",
-            icon: ExclamationTriangleIcon,
-            timestamp: new Date().toISOString(),
+          toast.warning({
+            title: "任务冲突",
+            message: "有一个任务正在运行中，请稍后再试",
           });
         }
-      } else if (error.message.includes("409")) {
+      } else if (isConflict) {
         // 重试次数用尽，提示用户
         retryCount.current = 0;
-        store.addMessage({
-          id: generateLocalMessageId(),
-          agent: "system",
-          role: "system",
-          content: "有一个任务正在运行中，请稍后再试",
-          icon: ExclamationTriangleIcon,
-          timestamp: new Date().toISOString(),
+        toast.warning({
+          title: "任务冲突",
+          message: "有一个任务正在运行中，请稍后再试",
+        });
+      } else {
+        // 其他错误
+        toast.error({
+          title: "生成失败",
+          message: apiError?.message || error.message || "未知错误",
+          details: import.meta.env.DEV ? JSON.stringify(apiError?.details) : undefined,
         });
       }
     },
@@ -187,15 +201,19 @@ export function ProjectPage() {
     onSuccess: () => {
       // feedback API 成功会创建新的 run，WebSocket 会收到 run_started 事件
     },
-    onError: (error: Error) => {
-      // 如果是 409 冲突，说明有运行中的任务，尝试取消后重试
-      if (error.message.includes("409")) {
-        store.addMessage({
-          agent: "system",
-          role: "info",
-          content: "正在处理中，请稍候...",
-          icon: ClockIcon,
-          timestamp: new Date().toISOString(),
+    onError: (error: Error | ApiError) => {
+      const apiError = error instanceof ApiError ? error : null;
+      const isConflict = apiError?.status === 409 || error.message.includes("409");
+
+      if (isConflict) {
+        toast.info({
+          title: "正在处理中",
+          message: "请稍候...",
+        });
+      } else {
+        toast.error({
+          title: "反馈失败",
+          message: apiError?.message || error.message || "未知错误",
         });
       }
     },

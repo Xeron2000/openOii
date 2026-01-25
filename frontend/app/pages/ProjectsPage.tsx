@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { projectsApi } from "~/services/api";
@@ -11,6 +11,8 @@ import {
   PencilIcon,
   TrashIcon,
 } from "@heroicons/react/24/outline";
+import { toast } from "~/utils/toast";
+import { ApiError } from "~/types/errors";
 
 export function ProjectsPage() {
   const queryClient = useQueryClient();
@@ -23,7 +25,25 @@ export function ProjectsPage() {
   } = useQuery({
     queryKey: ["projects"],
     queryFn: projectsApi.list,
+    retry: 1,
   });
+
+  // 显示加载错误
+  useEffect(() => {
+    if (error) {
+      const apiError = error instanceof ApiError ? error : null;
+      toast.error({
+        title: "加载项目列表失败",
+        message: apiError?.message || "无法获取项目列表",
+        actions: [
+          {
+            label: "重试",
+            onClick: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+          },
+        ],
+      });
+    }
+  }, [error, queryClient]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => projectsApi.delete(id),
@@ -37,6 +57,17 @@ export function ProjectsPage() {
       queryClient.removeQueries({ queryKey: ["shots", deletedId] });
       queryClient.removeQueries({ queryKey: ["messages", deletedId] });
       setDeleteTarget(null);
+      toast.success({
+        title: "删除成功",
+        message: "项目已删除",
+      });
+    },
+    onError: (error: Error | ApiError) => {
+      const apiError = error instanceof ApiError ? error : null;
+      toast.error({
+        title: "删除失败",
+        message: apiError?.message || error.message || "未知错误",
+      });
     },
   });
 

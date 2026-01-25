@@ -354,7 +354,7 @@ export function SettingsModal() {
         {isError && (
           <div className="p-6">
             <div role="alert" className="alert alert-error border-2 border-black">
-              <ExclamationTriangleIcon className="w-6 h-6"/>
+              <ExclamationCircleIcon className="w-6 h-6"/>
               <span>加载配置失败，请检查后端服务是否正常运行。</span>
             </div>
           </div>

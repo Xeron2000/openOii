@@ -7,6 +7,7 @@ import { NewProjectPage } from "./pages/NewProjectPage";
 import { ProjectsPage } from "./pages/ProjectsPage";
 import { ProjectPage } from "./pages/ProjectPage";
 import { SettingsModal } from "./components/settings/SettingsModal";
+import { ToastContainer } from "./components/toast/ToastContainer";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +30,8 @@ export function App() {
         </Routes>
         {/* 全局设置弹窗 - 在所有页面都可用 */}
         <SettingsModal />
+        {/* 全局 Toast 通知 - 在所有页面都可用 */}
+        <ToastContainer />
       </BrowserRouter>
     </QueryClientProvider>
   );
