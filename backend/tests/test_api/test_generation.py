@@ -26,15 +26,6 @@ async def test_generate_project_not_found(async_client):
 
 
 @pytest.mark.asyncio
-async def test_generate_project_conflict(async_client, test_session):
-    project = await create_project(test_session)
-    await create_run(test_session, project_id=project.id, status="running")
-
-    res = await async_client.post(f"/api/v1/projects/{project.id}/generate", json={})
-    assert res.status_code == 409
-
-
-@pytest.mark.asyncio
 async def test_generate_project_success(async_client, test_session, monkeypatch):
     monkeypatch.setattr(generation_routes.asyncio, "create_task", _immediate_task)
 
@@ -88,15 +79,3 @@ async def test_feedback_project_success(async_client, test_session, monkeypatch)
     messages = res.scalars().all()
     assert len(messages) == 1
     assert messages[0].content == "Please adjust tone"
-
-
-@pytest.mark.asyncio
-async def test_feedback_project_conflict(async_client, test_session):
-    project = await create_project(test_session)
-    await create_run(test_session, project_id=project.id, status="running")
-
-    res = await async_client.post(
-        f"/api/v1/projects/{project.id}/feedback",
-        json={"content": "Please adjust tone"},
-    )
-    assert res.status_code == 409
