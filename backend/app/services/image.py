@@ -24,6 +24,19 @@ class ImageService:
     def __init__(self, settings: Settings, *, max_retries: int = 3):
         self.settings = settings
         self.max_retries = max_retries
+        self._cache_client: httpx.AsyncClient | None = None
+
+    async def _get_cache_client(self) -> httpx.AsyncClient:
+        """获取或创建用于缓存图片的 HTTP 客户端（连接复用）"""
+        if self._cache_client is None or self._cache_client.is_closed:
+            self._cache_client = httpx.AsyncClient(timeout=self.settings.request_timeout_s)
+        return self._cache_client
+
+    async def close(self) -> None:
+        """关闭 HTTP 客户端"""
+        if self._cache_client is not None and not self._cache_client.is_closed:
+            await self._cache_client.aclose()
+            self._cache_client = None
 
     def _build_url(self) -> str:
         base = self.settings.image_base_url.rstrip("/")
@@ -75,11 +88,11 @@ class ImageService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self.settings.request_timeout_s) as client:
-                res = await client.get(url)
-                res.raise_for_status()
-                content = res.content
-                headers = res.headers
+            client = await self._get_cache_client()
+            res = await client.get(url)
+            res.raise_for_status()
+            content = res.content
+            headers = res.headers
 
             content_type = headers.get("Content-Type", "").split(";")[0].strip().lower()
             ext = content_type_map.get(content_type)

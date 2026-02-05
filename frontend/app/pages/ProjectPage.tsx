@@ -270,7 +270,8 @@ export function ProjectPage() {
       queryClient.invalidateQueries({ queryKey: ["characters", projectId] });
       queryClient.invalidateQueries({ queryKey: ["shots", projectId] });
     }
-  }, [store.isGenerating, store.progress, projectId, queryClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.isGenerating, store.progress, projectId]);
 
   // 监听项目更新事件，刷新项目数据
   const projectUpdatedAt = useEditorStore((state) => state.projectUpdatedAt);
@@ -279,7 +280,8 @@ export function ProjectPage() {
       queryClient.invalidateQueries({ queryKey: ["project", projectId] });
       queryClient.invalidateQueries({ queryKey: ["projects"] }); // 同时刷新列表
     }
-  }, [projectUpdatedAt, projectId, queryClient]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectUpdatedAt, projectId]);
 
   useEffect(() => {
     const autoStart = searchParams.get("autoStart");

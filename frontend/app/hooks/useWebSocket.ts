@@ -150,6 +150,26 @@ export function useProjectWebSocket(projectId: number | null) {
   return { send, disconnect, reconnect: connect };
 }
 
+/**
+ * 清除所有消息的 isLoading 状态
+ * 提取为辅助函数，避免代码重复
+ */
+function clearLoadingStates(
+  store: ReturnType<typeof useEditorStore.getState>,
+  agentFilter?: string
+): void {
+  const currentMessages = store.messages;
+  const updatedMessages = currentMessages.map((msg) => {
+    if (msg.isLoading && (!agentFilter || msg.agent === agentFilter)) {
+      return { ...msg, isLoading: false };
+    }
+    return msg;
+  });
+  if (updatedMessages.some((msg, idx) => msg !== currentMessages[idx])) {
+    store.setMessages(updatedMessages);
+  }
+}
+
 function handleWsEvent(event: WsEvent, store: ReturnType<typeof useEditorStore.getState>) {
   switch (event.type) {
     case "connected":
@@ -183,21 +203,9 @@ function handleWsEvent(event: WsEvent, store: ReturnType<typeof useEditorStore.g
       // 当收到同一个 agent 的新消息时，结束之前该 agent 的 loading 状态
       {
         const newAgent = event.data.agent as string;
-        const currentMessages = store.messages;
 
-        // 找到该 agent 最后一条 isLoading=true 的消息并结束它
-        const updatedMessages = currentMessages.map((msg) => {
-          // 只处理同一个 agent 的消息，且是 isLoading 状态
-          if (msg.agent === newAgent && msg.isLoading) {
-            return { ...msg, isLoading: false };
-          }
-          return msg;
-        });
-
-        // 如果有消息被更新，先更新 store
-        if (updatedMessages.some((msg, idx) => msg !== currentMessages[idx])) {
-          store.setMessages(updatedMessages);
-        }
+        // 清除该 agent 的 isLoading 状态
+        clearLoadingStates(store, newAgent);
 
         // 更新全局进度（如果消息带有 progress 字段）
         const msgProgress = event.data.progress as number | undefined;
@@ -219,18 +227,7 @@ function handleWsEvent(event: WsEvent, store: ReturnType<typeof useEditorStore.g
       break;
     case "agent_handoff":
       // Agent 邀请消息 - 同时清除所有 isLoading 状态
-      {
-        const currentMessages = store.messages;
-        const updatedMessages = currentMessages.map((msg) => {
-          if (msg.isLoading) {
-            return { ...msg, isLoading: false };
-          }
-          return msg;
-        });
-        if (updatedMessages.some((msg, idx) => msg !== currentMessages[idx])) {
-          store.setMessages(updatedMessages);
-        }
-      }
+      clearLoadingStates(store);
       store.addMessage({
         id: generateMessageId(),
         agent: "system",
@@ -241,18 +238,7 @@ function handleWsEvent(event: WsEvent, store: ReturnType<typeof useEditorStore.g
       break;
     case "run_awaiting_confirm":
       // 清除所有 isLoading 状态
-      {
-        const currentMessages = store.messages;
-        const updatedMessages = currentMessages.map((msg) => {
-          if (msg.isLoading) {
-            return { ...msg, isLoading: false };
-          }
-          return msg;
-        });
-        if (updatedMessages.some((msg, idx) => msg !== currentMessages[idx])) {
-          store.setMessages(updatedMessages);
-        }
-      }
+      clearLoadingStates(store);
       store.setAwaitingConfirm(true, event.data.agent as string, event.data.run_id as number);
       store.addMessage({
         id: generateMessageId(),
@@ -275,18 +261,7 @@ function handleWsEvent(event: WsEvent, store: ReturnType<typeof useEditorStore.g
       break;
     case "run_completed":
       // 清除所有 isLoading 状态
-      {
-        const currentMessages = store.messages;
-        const updatedMessages = currentMessages.map((msg) => {
-          if (msg.isLoading) {
-            return { ...msg, isLoading: false };
-          }
-          return msg;
-        });
-        if (updatedMessages.some((msg, idx) => msg !== currentMessages[idx])) {
-          store.setMessages(updatedMessages);
-        }
-      }
+      clearLoadingStates(store);
       store.setGenerating(false);
       store.setProgress(1);
       store.setCurrentAgent(null);
@@ -296,18 +271,7 @@ function handleWsEvent(event: WsEvent, store: ReturnType<typeof useEditorStore.g
       break;
     case "run_failed":
       // 清除所有 isLoading 状态
-      {
-        const currentMessages = store.messages;
-        const updatedMessages = currentMessages.map((msg) => {
-          if (msg.isLoading) {
-            return { ...msg, isLoading: false };
-          }
-          return msg;
-        });
-        if (updatedMessages.some((msg, idx) => msg !== currentMessages[idx])) {
-          store.setMessages(updatedMessages);
-        }
-      }
+      clearLoadingStates(store);
       store.setGenerating(false);
       store.setAwaitingConfirm(false);
       store.setCurrentRunId(null);

@@ -19,6 +19,9 @@ from app.services.file_cleaner import get_local_path
 
 logger = logging.getLogger(__name__)
 
+# 最大允许的图片文件大小（10MB）
+MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024
+
 
 class DoubaoVideoService:
     """豆包视频生成服务
@@ -76,6 +79,14 @@ class DoubaoVideoService:
         local_path = get_local_path(image_url)
         if not local_path or not local_path.exists():
             return image_url
+
+        # 安全检查：限制文件大小
+        file_size = local_path.stat().st_size
+        if file_size > MAX_IMAGE_SIZE_BYTES:
+            raise ValueError(
+                f"Image file too large: {file_size} bytes (max {MAX_IMAGE_SIZE_BYTES} bytes)"
+            )
+
         mime = mimetypes.guess_type(local_path.name)[0] or "image/png"
         data = base64.b64encode(local_path.read_bytes()).decode("ascii")
         logger.info("Inlining local image for Doubao request: %s", local_path)

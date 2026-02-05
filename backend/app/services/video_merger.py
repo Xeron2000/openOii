@@ -34,6 +34,20 @@ class VideoMergerService:
         """
         self.output_dir = output_dir or OUTPUT_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self._client: httpx.AsyncClient | None = None
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        """获取或创建 HTTP 客户端（连接复用）"""
+        if self._client is None or self._client.is_closed:
+            timeout = httpx.Timeout(300.0, connect=30.0)  # 5分钟超时
+            self._client = httpx.AsyncClient(timeout=timeout, follow_redirects=True)
+        return self._client
+
+    async def close(self) -> None:
+        """关闭 HTTP 客户端"""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def download_video(self, url: str, dest_path: Path) -> None:
         """下载视频文件
@@ -42,13 +56,12 @@ class VideoMergerService:
             url: 视频 URL
             dest_path: 目标路径
         """
-        timeout = httpx.Timeout(300.0, connect=30.0)  # 5分钟超时
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            async with client.stream("GET", url) as response:
-                response.raise_for_status()
-                with open(dest_path, "wb") as f:
-                    async for chunk in response.aiter_bytes(chunk_size=8192):
-                        f.write(chunk)
+        client = await self._get_client()
+        async with client.stream("GET", url) as response:
+            response.raise_for_status()
+            with open(dest_path, "wb") as f:
+                async for chunk in response.aiter_bytes(chunk_size=8192):
+                    f.write(chunk)
         logger.info(f"Downloaded video to {dest_path}")
 
     async def merge_videos(

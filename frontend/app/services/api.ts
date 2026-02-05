@@ -36,21 +36,40 @@ async function fetchApi<T>(
     }
 
     // 尝试解析响应体
-    const data = await res.json().catch(() => ({}));
+    let data: T;
+    try {
+      data = await res.json();
+    } catch {
+      // JSON 解析失败，如果响应不成功则抛出错误
+      if (!res.ok) {
+        throw new ApiError({
+          code: "INVALID_RESPONSE",
+          message: "服务器返回了无效的响应格式",
+          status: res.status,
+          request: {
+            method: options?.method || "GET",
+            url: endpoint,
+          },
+        });
+      }
+      // 响应成功但无法解析 JSON，返回 undefined（用于 204 等情况）
+      return undefined as T;
+    }
 
     if (!res.ok) {
       // 解析后端返回的结构化错误
-      const errorData = data.error || {};
+      const errorObj = data as unknown as { error?: { code?: string; message?: string; details?: Record<string, unknown> } };
+      const errorData = errorObj.error || {};
       throw new ApiError({
         code: errorData.code || "API_ERROR",
         message: errorData.message || res.statusText || "请求失败",
         status: res.status,
-        details: errorData.details,
+        details: errorData.details as Record<string, unknown> | undefined,
         request: {
           method: options?.method || "GET",
           url: endpoint,
         },
-        response: data,
+        response: data as Record<string, unknown>,
       });
     }
 

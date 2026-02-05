@@ -33,13 +33,25 @@ def is_local_file(url: str | None) -> bool:
 
 
 def get_local_path(url: str) -> Path | None:
-    """将本地 URL 转换为文件系统路径"""
+    """将本地 URL 转换为文件系统路径
+
+    安全检查：验证最终路径在 STATIC_DIR 内，防止路径遍历攻击
+    """
     static_path = _extract_static_path(url)
     if not static_path:
         return None
     # /static/videos/xxx.mp4 -> backend/app/static/videos/xxx.mp4
     relative_path = static_path.removeprefix("/static/")
-    return STATIC_DIR / relative_path
+    resolved_path = (STATIC_DIR / relative_path).resolve()
+
+    # 安全检查：确保路径在 STATIC_DIR 内
+    try:
+        resolved_path.relative_to(STATIC_DIR.resolve())
+    except ValueError:
+        logger.warning(f"Path traversal attempt detected: {url}")
+        return None
+
+    return resolved_path
 
 
 def delete_file(url: str | None) -> bool:
