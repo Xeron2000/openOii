@@ -28,6 +28,48 @@ def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+async def _delete_project_files(
+    session: AsyncSession, project: Project, project_id: int
+) -> None:
+    """删除项目关联的所有文件（视频、角色图片、分镜图片/视频）"""
+    # 删除项目最终视频
+    delete_file(project.video_url)
+
+    # 删除角色图片
+    chars_res = await session.execute(
+        select(Character).where(Character.project_id == project_id)
+    )
+    chars = chars_res.scalars().all()
+    delete_files([c.image_url for c in chars])
+
+    # 删除分镜图片和视频
+    shots_res = await session.execute(
+        select(Shot).where(Shot.project_id == project_id)
+    )
+    shots = shots_res.scalars().all()
+    delete_files([s.image_url for s in shots])
+    delete_files([s.video_url for s in shots])
+
+
+async def _delete_project_data(session: AsyncSession, project_id: int) -> None:
+    """删除项目关联的所有数据库记录"""
+    # 删除 Message（聊天消息）
+    await session.execute(delete(Message).where(Message.project_id == project_id))
+
+    # 删除 AgentMessage（通过 AgentRun 关联）
+    run_ids_subq = select(AgentRun.id).where(AgentRun.project_id == project_id)
+    await session.execute(delete(AgentMessage).where(AgentMessage.run_id.in_(run_ids_subq)))
+
+    # 删除 AgentRun
+    await session.execute(delete(AgentRun).where(AgentRun.project_id == project_id))
+
+    # 删除 Shot
+    await session.execute(delete(Shot).where(Shot.project_id == project_id))
+
+    # 删除 Character
+    await session.execute(delete(Character).where(Character.project_id == project_id))
+
+
 @router.post("", response_model=ProjectRead, status_code=status.HTTP_201_CREATED)
 async def create_project(payload: ProjectCreate, session: AsyncSession = SessionDep):
     style = (payload.style or "").strip() or "anime"
@@ -91,42 +133,13 @@ async def delete_project(project_id: int, session: AsyncSession = SessionDep):
         .values(status="cancelled")
     )
 
-    # 1. 收集并删除所有关联文件
-    # 1.1 删除项目最终视频
-    delete_file(project.video_url)
+    # 1. 删除所有关联文件
+    await _delete_project_files(session, project, project_id)
 
-    # 1.2 删除角色图片
-    chars_res = await session.execute(
-        select(Character).where(Character.project_id == project_id)
-    )
-    chars = chars_res.scalars().all()
-    delete_files([c.image_url for c in chars])
+    # 2. 删除所有关联数据库记录
+    await _delete_project_data(session, project_id)
 
-    # 1.3 删除分镜图片和视频
-    shots_res = await session.execute(
-        select(Shot).where(Shot.project_id == project_id)
-    )
-    shots = shots_res.scalars().all()
-    delete_files([s.image_url for s in shots])
-    delete_files([s.video_url for s in shots])
-
-    # 2. 删除 Message（聊天消息）
-    await session.execute(delete(Message).where(Message.project_id == project_id))
-
-    # 3. 删除 AgentMessage（通过 AgentRun 关联）
-    run_ids_subq = select(AgentRun.id).where(AgentRun.project_id == project_id)
-    await session.execute(delete(AgentMessage).where(AgentMessage.run_id.in_(run_ids_subq)))
-
-    # 4. 删除 AgentRun
-    await session.execute(delete(AgentRun).where(AgentRun.project_id == project_id))
-
-    # 5. 删除 Shot
-    await session.execute(delete(Shot).where(Shot.project_id == project_id))
-
-    # 6. 删除 Character
-    await session.execute(delete(Character).where(Character.project_id == project_id))
-
-    # 7. 最后删除 Project
+    # 3. 最后删除 Project
     await session.delete(project)
     await session.commit()
     return None

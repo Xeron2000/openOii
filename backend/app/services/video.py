@@ -6,9 +6,13 @@ import json
 import re
 from typing import Any
 
+import logging
+
 import httpx
 
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class VideoService:
@@ -110,14 +114,16 @@ class VideoService:
                                     content = delta.get("content", "")
                                     if content:
                                         collected_content += content
-                            except json.JSONDecodeError:
+                            except json.JSONDecodeError as e:
                                 # 可能是非 JSON 行，检查是否包含错误
                                 if "error" in data_str:
                                     try:
                                         err = json.loads(data_str)
                                         raise RuntimeError(f"Stream error: {err}")
                                     except json.JSONDecodeError:
-                                        pass
+                                        logger.debug("Non-JSON error line in stream: %s", data_str[:100])
+                                else:
+                                    logger.debug("Skipping non-JSON line in video stream: %s", e)
                                 continue
 
                     return collected_content

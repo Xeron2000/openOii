@@ -138,7 +138,14 @@ export function useProjectWebSocket(projectId: number | null) {
   useEffect(() => {
     reconnectAttempts.current = 0;
     connect();
-  }, [projectId, connect]);
+
+    // Cleanup: 组件卸载时断开连接
+    return () => {
+      clearReconnectTimer();
+      // 注意：不在这里调用 disconnect()，因为可能是 StrictMode 的双重挂载
+      // 只清理定时器，让连接在下次 connect() 时复用或在 onclose 时自动清理
+    };
+  }, [projectId, connect, clearReconnectTimer]);
 
   return { send, disconnect, reconnect: connect };
 }

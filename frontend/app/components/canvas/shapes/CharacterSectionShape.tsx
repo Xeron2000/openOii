@@ -17,6 +17,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { getStaticUrl } from "~/services/api";
 import type { Character } from "~/types";
+import { canvasEvents } from "../canvasEvents";
 
 export class CharacterSectionShapeUtil extends ShapeUtil<CharacterSectionShape> {
   static override type = "character-section" as const;
@@ -86,30 +87,20 @@ function CharacterCard({ character }: { character: Character }) {
   const imageUrl = getStaticUrl(character.image_url);
 
   const handleEdit = () => {
-    window.dispatchEvent(
-      new CustomEvent("canvas:edit-character", { detail: character })
-    );
+    canvasEvents.emit("edit-character", character);
   };
 
   const handleRegenerate = () => {
-    window.dispatchEvent(
-      new CustomEvent("canvas:regenerate-character", { detail: character.id })
-    );
+    canvasEvents.emit("regenerate-character", character.id);
   };
 
   const handleDelete = () => {
-    window.dispatchEvent(
-      new CustomEvent("canvas:delete-character", { detail: character })
-    );
+    canvasEvents.emit("delete-character", character);
   };
 
   const handlePreview = () => {
     if (imageUrl) {
-      window.dispatchEvent(
-        new CustomEvent("canvas:preview-image", {
-          detail: { src: imageUrl, alt: character.name },
-        })
-      );
+      canvasEvents.emit("preview-image", { src: imageUrl, alt: character.name });
     }
   };
 

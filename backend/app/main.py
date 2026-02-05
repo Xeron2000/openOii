@@ -197,8 +197,8 @@ def create_app() -> FastAPI:
                         },
                     },
                 )
-            except:
-                pass
+            except Exception:
+                pass  # 连接已断开，忽略发送错误
         finally:
             await ws_manager.disconnect(project_id, websocket)
 

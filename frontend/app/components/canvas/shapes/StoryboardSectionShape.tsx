@@ -18,6 +18,7 @@ import {
 } from "@heroicons/react/24/outline";
 import { getStaticUrl } from "~/services/api";
 import type { Shot } from "~/types";
+import { canvasEvents } from "../canvasEvents";
 
 export class StoryboardSectionShapeUtil extends ShapeUtil<StoryboardSectionShape> {
   static override type = "storyboard-section" as const;
@@ -88,46 +89,30 @@ function ShotCard({ shot }: { shot: Shot }) {
   const videoUrl = getStaticUrl(shot.video_url);
 
   const handleEdit = () => {
-    window.dispatchEvent(new CustomEvent("canvas:edit-shot", { detail: shot }));
+    canvasEvents.emit("edit-shot", shot);
   };
 
   const handleRegenerateImage = () => {
-    window.dispatchEvent(
-      new CustomEvent("canvas:regenerate-shot", {
-        detail: { id: shot.id, type: "image" },
-      })
-    );
+    canvasEvents.emit("regenerate-shot", { id: shot.id, type: "image" });
   };
 
   const handleRegenerateVideo = () => {
-    window.dispatchEvent(
-      new CustomEvent("canvas:regenerate-shot", {
-        detail: { id: shot.id, type: "video" },
-      })
-    );
+    canvasEvents.emit("regenerate-shot", { id: shot.id, type: "video" });
   };
 
   const handleDelete = () => {
-    window.dispatchEvent(new CustomEvent("canvas:delete-shot", { detail: shot }));
+    canvasEvents.emit("delete-shot", shot);
   };
 
   const handlePreviewImage = () => {
     if (imageUrl) {
-      window.dispatchEvent(
-        new CustomEvent("canvas:preview-image", {
-          detail: { src: imageUrl, alt: `镜头 ${shot.order}` },
-        })
-      );
+      canvasEvents.emit("preview-image", { src: imageUrl, alt: `镜头 ${shot.order}` });
     }
   };
 
   const handlePreviewVideo = () => {
     if (videoUrl) {
-      window.dispatchEvent(
-        new CustomEvent("canvas:preview-video", {
-          detail: { src: videoUrl, title: `镜头 ${shot.order}` },
-        })
-      );
+      canvasEvents.emit("preview-video", { src: videoUrl, title: `镜头 ${shot.order}` });
     }
   };
 

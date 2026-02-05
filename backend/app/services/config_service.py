@@ -130,13 +130,13 @@ def _parse_value(raw: str, field_type: Any) -> Any:
         if stripped:
             try:
                 return TypeAdapter(field_type).validate_python(json.loads(stripped))
-            except Exception:
+            except (json.JSONDecodeError, ValueError, TypeError):
                 return raw
     adapter = TypeAdapter(field_type)
     try:
         return adapter.validate_python(raw)
-    except Exception:
-        pass
+    except (ValueError, TypeError):
+        pass  # 验证失败，尝试其他解析方式
     if isinstance(raw, str):
         stripped = raw.strip()
         if (
@@ -145,7 +145,7 @@ def _parse_value(raw: str, field_type: Any) -> Any:
         ):
             try:
                 return adapter.validate_python(json.loads(stripped))
-            except Exception:
+            except (json.JSONDecodeError, ValueError, TypeError):
                 return raw
     return raw
 

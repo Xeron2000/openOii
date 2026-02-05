@@ -289,13 +289,15 @@ class ImageService:
                                         collected_content += content
                                     if reasoning_content:
                                         collected_content += reasoning_content
-                            except json.JSONDecodeError:
+                            except json.JSONDecodeError as e:
                                 if "error" in data_str:
                                     try:
                                         err = json.loads(data_str)
                                         raise RuntimeError(f"Stream error: {err}")
                                     except json.JSONDecodeError:
-                                        pass
+                                        logger.debug("Non-JSON error line in stream: %s", data_str[:100])
+                                else:
+                                    logger.debug("Skipping non-JSON line in image stream: %s", e)
                                 continue
 
                     return collected_content

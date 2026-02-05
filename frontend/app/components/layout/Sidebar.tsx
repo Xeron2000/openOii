@@ -28,10 +28,7 @@ export function Sidebar() {
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null);
 
-  // 调试：添加点击处理函数
   const handleSettingsClick = () => {
-    console.log("设置按钮被点击！");
-    console.log("openSettingsModal 函数:", openSettingsModal);
     openSettingsModal();
   };
 

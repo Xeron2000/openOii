@@ -13,80 +13,13 @@ import { customShapeUtils } from "./shapes";
 import { useCanvasLayout } from "~/hooks/useCanvasLayout";
 import { CanvasToolbar } from "./CanvasToolbar";
 import type { Character, Shot } from "~/types";
-import { XMarkIcon } from "@heroicons/react/24/outline";
 import { EditModal } from "~/components/ui/EditModal";
 import { ConfirmModal } from "~/components/ui/ConfirmModal";
+import { ImagePreviewModal, VideoPreviewModal } from "./PreviewModals";
+import { canvasEvents } from "./canvasEvents";
 
 interface InfiniteCanvasProps {
   projectId: number;
-}
-
-// 图片预览 Modal
-function ImagePreviewModal({
-  src,
-  alt,
-  onClose,
-}: {
-  src: string;
-  alt: string;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4"
-      onClick={onClose}
-    >
-      <div className="relative max-w-[90vw] max-h-[90vh]">
-        <img
-          src={src}
-          alt={alt}
-          className="max-w-full max-h-[90vh] object-contain rounded-lg"
-          onClick={(e) => e.stopPropagation()}
-        />
-        <button
-          className="absolute -top-3 -right-3 btn btn-circle btn-sm btn-neutral"
-          onClick={onClose}
-          aria-label="关闭"
-        >
-          <XMarkIcon className="w-5 h-5" aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// 视频预览 Modal
-function VideoPreviewModal({
-  src,
-  onClose,
-}: {
-  src: string;
-  title: string;
-  onClose: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4"
-      onClick={onClose}
-    >
-      <div className="relative max-w-[90vw] max-h-[90vh]">
-        <video
-          src={src}
-          className="max-w-full max-h-[90vh] object-contain rounded-lg"
-          controls
-          autoPlay
-          onClick={(e) => e.stopPropagation()}
-        />
-        <button
-          className="absolute -top-3 -right-3 btn btn-circle btn-sm btn-neutral"
-          onClick={onClose}
-          aria-label="关闭"
-        >
-          <XMarkIcon className="w-5 h-5" aria-hidden="true" />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 // 隐藏 tldraw 默认 UI
@@ -201,39 +134,25 @@ export function InfiniteCanvas({ projectId }: InfiniteCanvasProps) {
     videoTitle: project?.title || "最终视频",
   });
 
-  // 监听自定义事件
+  // 监听类型安全的画布事件
   useEffect(() => {
-    const handlePreviewImage = (e: CustomEvent) => setPreviewImage(e.detail);
-    const handlePreviewVideo = (e: CustomEvent) => setPreviewVideo(e.detail);
-    const handleEditCharacter = (e: CustomEvent) => setEditingCharacter(e.detail);
-    const handleRegenerateCharacter = (e: CustomEvent) => {
-      regenerateCharacterMutation.mutate(e.detail);
-    };
-    const handleDeleteCharacter = (e: CustomEvent) => setDeletingCharacter(e.detail);
-    const handleEditShot = (e: CustomEvent) => setEditingShot(e.detail);
-    const handleRegenerateShot = (e: CustomEvent) => {
-      regenerateShotMutation.mutate(e.detail);
-    };
-    const handleDeleteShot = (e: CustomEvent) => setDeletingShot(e.detail);
-
-    window.addEventListener("canvas:preview-image", handlePreviewImage as EventListener);
-    window.addEventListener("canvas:preview-video", handlePreviewVideo as EventListener);
-    window.addEventListener("canvas:edit-character", handleEditCharacter as EventListener);
-    window.addEventListener("canvas:regenerate-character", handleRegenerateCharacter as EventListener);
-    window.addEventListener("canvas:delete-character", handleDeleteCharacter as EventListener);
-    window.addEventListener("canvas:edit-shot", handleEditShot as EventListener);
-    window.addEventListener("canvas:regenerate-shot", handleRegenerateShot as EventListener);
-    window.addEventListener("canvas:delete-shot", handleDeleteShot as EventListener);
+    const unsubscribers = [
+      canvasEvents.on("preview-image", setPreviewImage),
+      canvasEvents.on("preview-video", setPreviewVideo),
+      canvasEvents.on("edit-character", setEditingCharacter),
+      canvasEvents.on("regenerate-character", (id) => {
+        regenerateCharacterMutation.mutate(id);
+      }),
+      canvasEvents.on("delete-character", setDeletingCharacter),
+      canvasEvents.on("edit-shot", setEditingShot),
+      canvasEvents.on("regenerate-shot", (data) => {
+        regenerateShotMutation.mutate(data);
+      }),
+      canvasEvents.on("delete-shot", setDeletingShot),
+    ];
 
     return () => {
-      window.removeEventListener("canvas:preview-image", handlePreviewImage as EventListener);
-      window.removeEventListener("canvas:preview-video", handlePreviewVideo as EventListener);
-      window.removeEventListener("canvas:edit-character", handleEditCharacter as EventListener);
-      window.removeEventListener("canvas:regenerate-character", handleRegenerateCharacter as EventListener);
-      window.removeEventListener("canvas:delete-character", handleDeleteCharacter as EventListener);
-      window.removeEventListener("canvas:edit-shot", handleEditShot as EventListener);
-      window.removeEventListener("canvas:regenerate-shot", handleRegenerateShot as EventListener);
-      window.removeEventListener("canvas:delete-shot", handleDeleteShot as EventListener);
+      unsubscribers.forEach((unsub) => unsub());
     };
   }, [regenerateCharacterMutation, regenerateShotMutation]);
 
@@ -335,6 +254,7 @@ export function InfiniteCanvas({ projectId }: InfiniteCanvasProps) {
           src={previewVideo.src}
           title={previewVideo.title}
           onClose={() => setPreviewVideo(null)}
+          showDownload={false}
         />
       )}
 
