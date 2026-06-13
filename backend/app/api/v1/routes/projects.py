@@ -14,6 +14,7 @@ from app.config import Settings
 from app.db.utils import utcnow
 from app.models.message import Message
 from app.models.project import Character, Project, Shot
+from app.models.universe import Universe, UniverseProjectLink
 from app.schemas.project import (
     CharacterRead,
     MessageRead,
@@ -76,6 +77,12 @@ async def create_project(
     session: AsyncSession = SessionDep,
     settings: Settings = SettingsDep,
 ):
+    universe: Universe | None = None
+    if payload.universe_id is not None:
+        universe = await session.get(Universe, payload.universe_id)
+        if universe is None:
+            raise HTTPException(status_code=404, detail="Universe not found")
+
     style = (payload.style or "").strip() or "anime"
     project = Project(
         title=payload.title,
@@ -86,6 +93,7 @@ async def create_project(
         character_hints=payload.character_hints or [],
         creation_mode=payload.creation_mode,
         reference_images=payload.reference_images or [],
+        exports=payload.exports or [],
         text_provider_override=payload.text_provider_override,
         image_provider_override=payload.image_provider_override,
         video_provider_override=payload.video_provider_override,
@@ -97,20 +105,16 @@ async def create_project(
     await session.commit()
     await session.refresh(project)
 
-    # If universe_id provided, also create UniverseProjectLink
-    if payload.universe_id:
-        from app.models.universe import Universe, UniverseProjectLink
-        universe = await session.get(Universe, payload.universe_id)
-        if universe:
-            link = UniverseProjectLink(
-                universe_id=payload.universe_id,
-                project_id=project.id,
-                chapter_number=payload.chapter_number,
-                chapter_title=payload.chapter_title,
-                is_main_story=True,
-            )
-            session.add(link)
-            await session.commit()
+    if universe is not None:
+        link = UniverseProjectLink(
+            universe_id=universe.id,
+            project_id=project.id,
+            chapter_number=payload.chapter_number,
+            chapter_title=payload.chapter_title,
+            is_main_story=True,
+        )
+        session.add(link)
+        await session.commit()
 
     return await _project_read_model(project, settings)
 

@@ -131,11 +131,11 @@ export function ProjectsPage() {
         </div>
       </header>
       <div className="flex flex-col min-h-[calc(100vh-40px)]">
-        <header className="bg-base-100 border-b-3 border-base-content/30 px-6 py-4">
+        <header className="bg-base-100 border-b-3 border-base-content/30 px-4 py-4 sm:px-6">
           <h1 className="text-2xl font-heading font-bold">
             <span className="underline-sketch">全部项目</span>
           </h1>
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <label className="cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -157,8 +157,8 @@ export function ProjectsPage() {
           </div>
         </header>
 
-        <main className="flex-1 px-6 py-8">
-          <div className="max-w-3xl mx-auto">
+        <main className="flex-1 px-4 py-8 sm:px-6">
+          <div className="mx-auto w-full max-w-3xl min-w-0">
             {isLoading ? (
               <div className="flex flex-col items-center justify-center py-12 gap-4">
                 <PencilIcon className="w-6 h-6 animate-pulse" aria-hidden="true" />
@@ -176,17 +176,17 @@ export function ProjectsPage() {
                 <p className="text-base-content/60">开始创作你的第一个故事吧！</p>
               </Card>
             ) : (
-              <div className="grid gap-3">
+              <div className="grid min-w-0 gap-3">
                 {projects.map((project) => (
                   <Link
                     key={project.id}
                     to={`/project/${project.id}`}
-                    className="block"
+                    className="block min-w-0 max-w-full"
                   >
-                    <Card className="group transition-transform duration-200 hover:-translate-y-1 cursor-pointer">
-                      <div className="flex items-center justify-between">
+                    <Card className="group min-w-0 overflow-hidden !p-4 transition-transform duration-200 hover:-translate-y-1 cursor-pointer sm:!p-6">
+                      <div className="flex min-w-0 items-center gap-2">
                         <label
-                          className="mr-2 cursor-pointer"
+                          className="shrink-0 cursor-pointer"
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -194,6 +194,7 @@ export function ProjectsPage() {
                         >
                           <input
                             type="checkbox"
+                            aria-label={`选择项目 ${project.title}`}
                             checked={selectedIds.includes(project.id)}
                             onChange={(e) => handleToggleSelect(project.id, e.target.checked)}
                             onClick={(e) => e.stopPropagation()}
@@ -201,12 +202,12 @@ export function ProjectsPage() {
                           />
                         </label>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-heading font-bold truncate">
+                          <div className="flex min-w-0 flex-wrap items-center gap-2">
+                            <span className="block min-w-0 flex-1 truncate font-heading font-bold">
                               {project.title}
                             </span>
                             <span
-                              className={`badge badge-sm font-bold ${
+                              className={`badge badge-sm shrink-0 font-bold ${
                                 project.status === "ready"
                                   ? "bg-success/20 text-success-content"
                                   : project.status === "processing"
@@ -224,11 +225,13 @@ export function ProjectsPage() {
                           )}
                         </div>
                         <button
-                          className="p-2 opacity-0 group-hover:opacity-100 hover:bg-error/20 rounded-lg transition-all cursor-pointer"
+                          type="button"
+                          className="shrink-0 rounded-lg p-2 opacity-100 transition-all cursor-pointer hover:bg-error/20 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
                           onClick={(e) => handleDeleteClick(project.id, e)}
+                          aria-label={`删除项目 ${project.title}`}
                           title="删除"
                         >
-                          <TrashIcon className="w-5 h-5 text-error" />
+                          <TrashIcon className="w-5 h-5 text-error" aria-hidden="true" />
                         </button>
                       </div>
                     </Card>

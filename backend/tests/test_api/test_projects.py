@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
 from app.api.deps import get_app_settings, get_db_session, get_ws_manager
 from app.api.v1.routes import projects as project_routes
 from app.main import create_app
 from app.models.project import Project
+from app.models.universe import Universe, UniverseProjectLink
 from app.schemas.project import ProjectProviderEntry, ProviderResolution
 from app.services.provider_resolution import resolve_project_provider_settings
 from tests.factories import create_message, create_project, create_run
@@ -50,6 +52,11 @@ async def test_create_project_persists_bootstrap_payload(async_client, test_sess
         "title": "New Project",
         "story": "Once upon a time",
         "style": "cinematic",
+        "target_shot_count": 8,
+        "character_hints": ["主角", "反派"],
+        "creation_mode": "quick",
+        "reference_images": ["/static/references/ref.png"],
+        "exports": ["pdf", "webtoon"],
         "text_provider_override": "openai",
         "image_provider_override": "openai",
         "video_provider_override": "doubao",
@@ -62,6 +69,11 @@ async def test_create_project_persists_bootstrap_payload(async_client, test_sess
     assert data["story"] == "Once upon a time"
     assert data["style"] == "cinematic"
     assert data["status"] == "draft"
+    assert data["target_shot_count"] == 8
+    assert data["character_hints"] == ["主角", "反派"]
+    assert data["creation_mode"] == "quick"
+    assert data["reference_images"] == ["/static/references/ref.png"]
+    assert data["exports"] == ["pdf", "webtoon"]
     assert data["provider_settings"]["text"]["selected_key"] == "openai"
     assert data["provider_settings"]["text"]["source"] == "project"
     assert data["provider_settings"]["image"]["resolved_key"] == "openai"
@@ -75,6 +87,11 @@ async def test_create_project_persists_bootstrap_payload(async_client, test_sess
     assert project.story == payload["story"]
     assert project.style == payload["style"]
     assert project.status == "draft"
+    assert project.target_shot_count == 8
+    assert project.character_hints == ["主角", "反派"]
+    assert project.creation_mode == "quick"
+    assert project.reference_images == ["/static/references/ref.png"]
+    assert project.exports == ["pdf", "webtoon"]
     assert project.text_provider_override == "openai"
     assert project.image_provider_override == "openai"
     assert project.video_provider_override == "doubao"
@@ -314,6 +331,54 @@ async def test_create_project_rejects_unknown_provider_keys(async_client):
     )
 
     assert res.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_project_rejects_unknown_universe_id(async_client):
+    res = await async_client.post(
+        "/api/v1/projects",
+        json={
+            "title": "Bad Universe Project",
+            "universe_id": 99999,
+        },
+    )
+
+    assert res.status_code == 404
+    assert res.json()["detail"] == "Universe not found"
+
+
+@pytest.mark.asyncio
+async def test_create_project_links_existing_universe(async_client, test_session):
+    universe = Universe(name="Linked World")
+    test_session.add(universe)
+    await test_session.commit()
+    await test_session.refresh(universe)
+
+    res = await async_client.post(
+        "/api/v1/projects",
+        json={
+            "title": "Chapter Project",
+            "universe_id": universe.id,
+            "chapter_number": 2,
+            "chapter_title": "归来",
+        },
+    )
+
+    assert res.status_code == 201
+    data = res.json()
+    assert data["universe_id"] == universe.id
+    assert data["chapter_number"] == 2
+    assert data["chapter_title"] == "归来"
+
+    links = (
+        await test_session.execute(
+            select(UniverseProjectLink).where(UniverseProjectLink.project_id == data["id"])
+        )
+    ).scalars().all()
+    assert len(links) == 1
+    assert links[0].universe_id == universe.id
+    assert links[0].chapter_number == 2
+    assert links[0].chapter_title == "归来"
 
 
 @pytest.mark.asyncio

@@ -16,6 +16,7 @@ from app.schemas.universe import (
     UniverseDetailRead,
     UniverseProjectLinkCreate,
     UniverseProjectLinkRead,
+    ImportedCharacterRead,
     SharedCharacterRead,
     SharedCharacterPromote,
     SharedCharacterManualCreate,
@@ -309,7 +310,7 @@ async def create_shared_character_manual(
 
 @router.post(
     "/projects/{project_id}/import-character/{shared_character_id}",
-    response_model=dict,
+    response_model=ImportedCharacterRead,
     status_code=status.HTTP_201_CREATED,
 )
 async def import_character_to_project(
@@ -331,7 +332,7 @@ async def import_character_to_project(
     }
 
 
-@router.post("/characters/{character_id}/sync-to-universe")
+@router.post("/characters/{character_id}/sync-to-universe", response_model=SharedCharacterRead)
 async def sync_character_to_universe(
     character_id: int,
     session: AsyncSession = SessionDep,

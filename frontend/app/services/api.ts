@@ -20,6 +20,61 @@ import type {
 
 const API_BASE = getApiBase();
 
+function getAdminHeaders(): Record<string, string> {
+	try {
+		const adminToken = localStorage.getItem("openoii_admin_token");
+		return adminToken ? { "X-Admin-Token": adminToken } : {};
+	} catch {
+		return {};
+	}
+}
+
+async function parseApiResponse<T>(
+	res: Response,
+	endpoint: string,
+	method: string,
+): Promise<T> {
+	if (res.status === 204 || res.headers.get("content-length") === "0") {
+		return undefined as T;
+	}
+
+	let data: T;
+	try {
+		data = await res.json();
+	} catch {
+		if (!res.ok) {
+			throw new ApiError({
+				code: "INVALID_RESPONSE",
+				message: "服务器返回了无效的响应格式",
+				status: res.status,
+				request: { method, url: endpoint },
+			});
+		}
+		return undefined as T;
+	}
+
+	if (!res.ok) {
+		const errorObj = data as unknown as {
+			error?: {
+				code?: string;
+				message?: string;
+				details?: Record<string, unknown>;
+			};
+		};
+		const errorData = errorObj.error || {};
+		throw new ApiError({
+			code: errorData.code || "API_ERROR",
+			message: errorData.message || res.statusText || "请求失败",
+			status: res.status,
+			details: errorData.details as Record<string, unknown> | undefined,
+			request: { method, url: endpoint },
+			response: data as Record<string, unknown>,
+		});
+	}
+
+	return data;
+}
+
 /**
  * 将后端静态文件路径转换为完整 URL
  * @param path 后端返回的路径，如 "/static/videos/xxx.mp4"
@@ -73,69 +128,17 @@ async function fetchApi<T>(
 	options?: RequestInit,
 ): Promise<T> {
 	try {
-		let adminToken: string | null = null;
-		try {
-			adminToken = localStorage.getItem("openoii_admin_token");
-		} catch {}
+		const method = options?.method || "GET";
 		const res = await fetch(`${API_BASE}${endpoint}`, {
 			...options,
 			headers: {
 				"Content-Type": "application/json",
-				...(adminToken ? { "X-Admin-Token": adminToken } : {}),
+				...getAdminHeaders(),
 				...options?.headers,
 			},
 		});
 
-		// 处理 204 No Content 响应
-		if (res.status === 204 || res.headers.get("content-length") === "0") {
-			return undefined as T;
-		}
-
-		// 尝试解析响应体
-		let data: T;
-		try {
-			data = await res.json();
-		} catch {
-			// JSON 解析失败，如果响应不成功则抛出错误
-			if (!res.ok) {
-				throw new ApiError({
-					code: "INVALID_RESPONSE",
-					message: "服务器返回了无效的响应格式",
-					status: res.status,
-					request: {
-						method: options?.method || "GET",
-						url: endpoint,
-					},
-				});
-			}
-			// 响应成功但无法解析 JSON，返回 undefined（用于 204 等情况）
-			return undefined as T;
-		}
-
-		if (!res.ok) {
-			// 解析后端返回的结构化错误
-			const errorObj = data as unknown as {
-				error?: {
-					code?: string;
-					message?: string;
-					details?: Record<string, unknown>;
-				};
-			};
-			const errorData = errorObj.error || {};
-			throw new ApiError({
-				code: errorData.code || "API_ERROR",
-				message: errorData.message || res.statusText || "请求失败",
-				status: res.status,
-				details: errorData.details as Record<string, unknown> | undefined,
-				request: {
-					method: options?.method || "GET",
-					url: endpoint,
-				},
-				response: data as Record<string, unknown>,
-			});
-		}
-
-		return data;
+		return await parseApiResponse<T>(res, endpoint, method);
 	} catch (error) {
 		// 如果已经是 ApiError，直接抛出
 		if (error instanceof ApiError) {
@@ -151,6 +154,32 @@ async function fetchApi<T>(
 				method: options?.method || "GET",
 				url: endpoint,
 			},
+		});
+	}
+}
+
+async function fetchFormApi<T>(
+	endpoint: string,
+	formData: FormData,
+	method = "POST",
+): Promise<T> {
+	try {
+		const res = await fetch(`${API_BASE}${endpoint}`, {
+			method,
+			body: formData,
+			headers: getAdminHeaders(),
+		});
+		return await parseApiResponse<T>(res, endpoint, method);
+	} catch (error) {
+		if (error instanceof ApiError) {
+			throw error;
+		}
+
+		throw new ApiError({
+			code: "NETWORK_ERROR",
+			message: "网络连接失败，请检查您的网络设置",
+			details: { originalError: String(error) },
+			request: { method, url: endpoint },
 		});
 	}
 }
@@ -190,16 +219,10 @@ export const projectsApi = {
 	uploadReference: async (projectId: number, file: File) => {
 		const formData = new FormData();
 		formData.append("file", file);
-		const baseUrl = getApiBase();
-		const res = await fetch(
-			`${baseUrl}/api/v1/projects/${projectId}/upload-reference`,
-			{
-				method: "POST",
-				body: formData,
-			},
+		return fetchFormApi<{ url: string; reference_images: string[] }>(
+			`/api/v1/projects/${projectId}/upload-reference`,
+			formData,
 		);
-		if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-		return res.json() as Promise<{ url: string; reference_images: string[] }>;
 	},
 
 	getCharacters: (id: number) =>
@@ -388,13 +411,7 @@ export const assetsApi = {
 	uploadImage: async (file: File) => {
 		const formData = new FormData();
 		formData.append("file", file);
-		const baseUrl = getApiBase();
-		const res = await fetch(`${baseUrl}/api/v1/assets/upload-image`, {
-			method: "POST",
-			body: formData,
-		});
-		if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-		return res.json() as Promise<{ url: string }>;
+		return fetchFormApi<{ url: string }>("/api/v1/assets/upload-image", formData);
 	},
 };
 
@@ -631,7 +648,7 @@ export const universesApi = {
 		),
 
 	importCharacter: (projectId: number, sharedCharacterId: number) =>
-		fetchApi<{ id: number; name: string; project_id: number }>(
+		fetchApi<import("~/types").ImportedCharacterRead>(
 			`/api/v1/universes/projects/${projectId}/import-character/${sharedCharacterId}`,
 			{ method: "POST" },
 		),

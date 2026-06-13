@@ -37,4 +37,13 @@ describe("CanvasToolbar", () => {
     const { container } = render(<CanvasToolbar className="custom" />);
     expect(container.firstChild).toHaveClass("custom");
   });
+
+  it("keeps the toolbar constrained on narrow viewports", () => {
+    const { container } = render(<CanvasToolbar projectId={123} />);
+    expect(container.firstChild).toHaveClass(
+      "max-w-[calc(100vw-1rem)]",
+      "flex-wrap",
+      "justify-center",
+    );
+  });
 });

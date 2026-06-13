@@ -45,6 +45,12 @@ class UniverseProjectLinkRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ImportedCharacterRead(BaseModel):
+    id: int
+    name: str
+    project_id: int
+
+
 class SharedCharacterRead(BaseModel):
     id: int
     universe_id: int

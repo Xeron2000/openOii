@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
 	Radar,
 	RadarChart,
@@ -17,6 +17,7 @@ import {
 import { CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import { consistencyApi } from "~/services/api";
 import { toast } from "~/utils/toast";
+import { ApiError } from "~/types/errors";
 import type {
 	CharacterConsistencyRead,
 	ConsistencyReportRead,
@@ -43,6 +44,19 @@ const GRADE_BG: Record<string, string> = {
 	D: "bg-error/20",
 	F: "bg-error/20",
 };
+
+const CONSISTENCY_POLL_INTERVAL_MS = 2000;
+const CONSISTENCY_MAX_POLLS = 6;
+
+function isMissingReportError(error: unknown) {
+	return error instanceof ApiError && error.status === 404;
+}
+
+function warnInDev(message: string, error: unknown) {
+	if (import.meta.env.DEV) {
+		console.warn(message, error);
+	}
+}
 
 function GradeBadge({ grade }: { grade: string }) {
 	return (
@@ -77,7 +91,11 @@ function CharacterCard({
 				onClick={onToggle}
 				role="button"
 				tabIndex={0}
-				onKeyDown={(e) => e.key === "Enter" && onToggle()}
+				onKeyDown={(e) => {
+					if (e.key !== "Enter" && e.key !== " ") return;
+					e.preventDefault();
+					onToggle();
+				}}
 			>
 				<div className="flex items-center justify-between">
 					<h3 className="card-title text-base">{report.character_name}</h3>
@@ -160,27 +178,49 @@ export function ConsistencyPanel({ projectId, onClose }: ConsistencyPanelProps) 
 	const [loading, setLoading] = useState(false);
 	const [evaluating, setEvaluating] = useState(false);
 	const [expandedChar, setExpandedChar] = useState<number | null>(null);
+	const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const mountedRef = useRef(true);
 
-	const fetchReport = useCallback(async () => {
-		setLoading(true);
+	const clearEvalPoll = useCallback(() => {
+		if (pollTimerRef.current !== null) {
+			clearTimeout(pollTimerRef.current);
+			pollTimerRef.current = null;
+		}
+	}, []);
+
+	const fetchReport = useCallback(async (options?: { showLoading?: boolean }) => {
+		const showLoading = options?.showLoading ?? true;
+		if (showLoading) {
+			setLoading(true);
+		}
 		try {
 			const resp = await consistencyApi.getReport(projectId);
-			if (resp.report_data) {
+			if (resp.report_data && mountedRef.current) {
 				setReport(resp.report_data);
 			}
-		} catch {
-			// 404 = no report yet
+			return resp;
+		} catch (error) {
+			if (!isMissingReportError(error)) {
+				warnInDev("Failed to load consistency report", error);
+			}
+			return null;
 		} finally {
-			setLoading(false);
+			if (showLoading && mountedRef.current) {
+				setLoading(false);
+			}
 		}
 	}, [projectId]);
 
 	const fetchHistory = useCallback(async () => {
 		try {
 			const hist = await consistencyApi.getHistory(projectId, 20);
-			setHistory(hist);
-		} catch {
-			// ignore
+			if (mountedRef.current) {
+				setHistory(hist);
+			}
+			return hist;
+		} catch (error) {
+			warnInDev("Failed to load consistency report history", error);
+			return [];
 		}
 	}, [projectId]);
 
@@ -189,8 +229,57 @@ export function ConsistencyPanel({ projectId, onClose }: ConsistencyPanelProps) 
 		fetchHistory();
 	}, [fetchReport, fetchHistory]);
 
+	useEffect(() => {
+		mountedRef.current = true;
+		return () => {
+			mountedRef.current = false;
+			clearEvalPoll();
+		};
+	}, [clearEvalPoll]);
+
+	const pollForFreshReport = useCallback(
+		(triggeredAt: number, attempt = 1) => {
+			pollTimerRef.current = setTimeout(() => {
+				void (async () => {
+					const latest = await fetchReport({ showLoading: false });
+					await fetchHistory();
+					if (!mountedRef.current) return;
+
+					const latestCreatedAt = latest ? Date.parse(latest.created_at) : Number.NaN;
+					const hasFreshReport = Boolean(
+						latest?.report_data &&
+							Number.isFinite(latestCreatedAt) &&
+							latestCreatedAt >= triggeredAt - 1000,
+					);
+
+					if (hasFreshReport) {
+						pollTimerRef.current = null;
+						setEvaluating(false);
+						return;
+					}
+
+					if (attempt >= CONSISTENCY_MAX_POLLS) {
+						pollTimerRef.current = null;
+						setEvaluating(false);
+						toast.info({
+							title: "评估仍在进行",
+							message: "后台任务尚未返回新报告，可稍后重新打开面板查看",
+							duration: 5000,
+						});
+						return;
+					}
+
+					pollForFreshReport(triggeredAt, attempt + 1);
+				})();
+			}, CONSISTENCY_POLL_INTERVAL_MS);
+		},
+		[fetchHistory, fetchReport],
+	);
+
 	const handleEval = async () => {
+		clearEvalPoll();
 		setEvaluating(true);
+		const triggeredAt = Date.now();
 		try {
 			await consistencyApi.triggerEval(projectId);
 			toast.info({
@@ -198,19 +287,16 @@ export function ConsistencyPanel({ projectId, onClose }: ConsistencyPanelProps) 
 				message: "正在后台计算角色一致性，完成后将自动刷新",
 				duration: 3000,
 			});
-			// Poll for result after a delay
-			setTimeout(async () => {
-				await fetchReport();
-				await fetchHistory();
-				setEvaluating(false);
-			}, 8000);
+			pollForFreshReport(triggeredAt);
 		} catch (e) {
 			toast.error({
 				title: "评估触发失败",
 				message: e instanceof Error ? e.message : "未知错误",
 				duration: 5000,
 			});
-			setEvaluating(false);
+			if (mountedRef.current) {
+				setEvaluating(false);
+			}
 		}
 	};
 

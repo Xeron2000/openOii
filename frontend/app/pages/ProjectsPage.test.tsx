@@ -180,7 +180,7 @@ describe('ProjectsPage', () => {
     expect(screen.getByText('Project 1')).toBeInTheDocument();
     expect(screen.getByText('Project 2')).toBeInTheDocument();
 
-    await user.click(screen.getAllByTitle('删除')[0]);
+    await user.click(screen.getByRole('button', { name: '删除项目 Project 1' }));
     expect(screen.getByText('删除项目')).toBeInTheDocument();
 
     await user.click(screen.getAllByRole('button', { name: '删除' }).at(-1) as HTMLButtonElement);
@@ -275,7 +275,7 @@ describe('ProjectsPage', () => {
 
     render(<ProjectsPage />);
 
-    await user.click(screen.getAllByTitle('删除')[1]);
+    await user.click(screen.getByRole('button', { name: '删除项目 Project 2' }));
     await user.click(screen.getAllByRole('button', { name: '删除' }).at(-1) as HTMLButtonElement);
 
     await waitFor(() => {
@@ -286,5 +286,14 @@ describe('ProjectsPage', () => {
     });
     expect(cleanupDeletedProjectCaches).not.toHaveBeenCalled();
     expect(screen.getByText('Project 2')).toBeInTheDocument();
+  });
+
+  it('labels per-project selection and delete controls for assistive technology', () => {
+    render(<ProjectsPage />);
+
+    expect(screen.getByRole('checkbox', { name: '选择项目 Project 1' })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '选择项目 Project 2' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '删除项目 Project 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '删除项目 Project 2' })).toBeInTheDocument();
   });
 });

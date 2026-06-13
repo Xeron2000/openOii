@@ -45,11 +45,11 @@ function ProjectDropdown({ currentId }: { currentId?: number }) {
 	const list = (projects ?? []) as Project[];
 
 	return (
-		<div className="relative" ref={ref}>
+		<div className="relative min-w-0" ref={ref}>
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="flex items-center gap-1 text-xs font-heading font-bold max-w-[180px] hover:text-primary transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+				className="flex max-w-[120px] items-center gap-1 text-xs font-heading font-bold transition-colors hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:max-w-[180px]"
 				aria-expanded={open}
 				aria-haspopup="true"
 			>
@@ -119,8 +119,8 @@ export function TopBar({
 		const iconCls = "w-3.5 h-3.5";
 
 		return (
-			<header className="flex-shrink-0 flex items-center h-10 px-3 bg-base-100 border-b-2 border-base-content/15 z-30 gap-3">
-				<div className="flex items-center gap-2">
+			<header className="z-30 flex h-10 flex-shrink-0 items-center gap-2 border-b-2 border-base-content/15 bg-base-100 px-2 sm:gap-3 sm:px-3">
+				<div className="flex min-w-0 items-center gap-2">
 					{projectId ? (
 						<ProjectDropdown currentId={projectId} />
 					) : (
@@ -130,15 +130,16 @@ export function TopBar({
 					)}
 				</div>
 
-				<div className="flex-1" />
+				<div className="min-w-0 flex-1" />
 
-				<div className="flex items-center gap-1">
+				<div className="flex shrink-0 items-center gap-1">
 					<Button
 						variant={assetsOpen ? "primary" : "ghost"}
 						size="sm"
 						className={btnCls}
 						onClick={onToggleAssets}
 						title="资产库"
+						aria-label="资产库"
 					>
 						<SvgIcon name="archive" size={14} />
 						<span className="text-xs hidden sm:inline">资产</span>
@@ -149,6 +150,7 @@ export function TopBar({
 						className={btnCls}
 						onClick={onToggleHistory}
 						title="对话历史"
+						aria-label="对话历史"
 					>
 						<SvgIcon name="clock-3" size={14} />
 						<span className="text-xs hidden sm:inline">历史</span>
@@ -170,6 +172,7 @@ export function TopBar({
 						className={btnCls}
 						onClick={openSettingsModal}
 						title="设置"
+						aria-label="设置"
 					>
 						<Cog6ToothIcon className={iconCls} />
 						<span className="text-xs hidden sm:inline">设置</span>

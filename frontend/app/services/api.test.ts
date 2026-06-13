@@ -223,6 +223,8 @@ describe("projectsApi", () => {
 describe("admin token localStorage", () => {
 	const mockFetch = vi.fn();
 	let configApi: typeof import("./api").configApi;
+	let projectsApi: typeof import("./api").projectsApi;
+	let assetsApi: typeof import("./api").assetsApi;
 	const store: Record<string, string> = {};
 
 	beforeEach(async () => {
@@ -240,6 +242,8 @@ describe("admin token localStorage", () => {
 		Object.keys(store).forEach((k) => delete store[k]);
 		const mod = await import("./api");
 		configApi = mod.configApi;
+		projectsApi = mod.projectsApi;
+		assetsApi = mod.assetsApi;
 	});
 
 	afterEach(() => {
@@ -313,6 +317,50 @@ describe("admin token localStorage", () => {
 		const lastCall = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
 		const headers = lastCall[1].headers as Record<string, string>;
 		expect(headers["X-Admin-Token"]).toBeUndefined();
+	});
+
+	it("includes X-Admin-Token for project reference uploads", async () => {
+		store["openoii_admin_token"] = "test-token";
+		mockFetch.mockResolvedValueOnce(
+			new Response(
+				JSON.stringify({
+					url: "/static/references/ref.png",
+					reference_images: ["/static/references/ref.png"],
+				}),
+				{ status: 200 },
+			),
+		);
+
+		const file = new File(["image"], "ref.png", { type: "image/png" });
+		await projectsApi.uploadReference(12, file);
+
+		const [url, options] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+		const headers = options.headers as Record<string, string>;
+		expect(url).toContain("/api/v1/projects/12/upload-reference");
+		expect(options.method).toBe("POST");
+		expect(options.body).toBeInstanceOf(FormData);
+		expect(headers["X-Admin-Token"]).toBe("test-token");
+		expect(headers["Content-Type"]).toBeUndefined();
+	});
+
+	it("includes X-Admin-Token for asset image uploads", async () => {
+		store["openoii_admin_token"] = "test-token";
+		mockFetch.mockResolvedValueOnce(
+			new Response(JSON.stringify({ url: "/static/assets/ref.png" }), {
+				status: 200,
+			}),
+		);
+
+		const file = new File(["image"], "asset.png", { type: "image/png" });
+		await assetsApi.uploadImage(file);
+
+		const [url, options] = mockFetch.mock.calls[mockFetch.mock.calls.length - 1];
+		const headers = options.headers as Record<string, string>;
+		expect(url).toContain("/api/v1/assets/upload-image");
+		expect(options.method).toBe("POST");
+		expect(options.body).toBeInstanceOf(FormData);
+		expect(headers["X-Admin-Token"]).toBe("test-token");
+		expect(headers["Content-Type"]).toBeUndefined();
 	});
 });
 

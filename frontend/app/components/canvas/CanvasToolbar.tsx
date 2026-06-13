@@ -152,11 +152,12 @@ export const CanvasToolbar = track(function CanvasToolbar({
   return (
     <>
     <div
-      className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-1 p-1.5 rounded-xl bg-base-100 border-3 border-base-content/25 shadow-comic text-base-content ${className || ""}`}
+      className={`absolute bottom-4 left-1/2 z-50 flex max-w-[calc(100vw-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1 rounded-xl border-3 border-base-content/25 bg-base-100 p-1.5 text-base-content shadow-comic sm:max-w-none sm:flex-nowrap ${className || ""}`}
     >
       {/* 选择工具 */}
       <div className="tooltip tooltip-top" data-tip="选择工具 (V)">
         <button
+          type="button"
           className={`btn btn-sm btn-square ${
             currentTool === "select" ? "btn-primary" : "btn-ghost text-base-content"
           }`}
@@ -170,6 +171,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
       {/* 抓手工具 */}
       <div className="tooltip tooltip-top" data-tip="抓手工具 (H)">
         <button
+          type="button"
           className={`btn btn-sm btn-square ${
             currentTool === "hand" ? "btn-primary" : "btn-ghost text-base-content"
           }`}
@@ -186,6 +188,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
       {/* 缩小 */}
       <div className="tooltip tooltip-top" data-tip="缩小">
         <button
+          type="button"
           className="btn btn-sm btn-square btn-ghost text-base-content"
           onClick={handleZoomOut}
           aria-label="缩小"
@@ -197,6 +200,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
       {/* 缩放百分比 */}
       <div className="tooltip tooltip-top" data-tip="重置缩放">
         <button
+          type="button"
           className="btn btn-sm btn-ghost min-w-[60px] font-mono text-sm text-base-content"
           onClick={handleZoomReset}
           aria-label="重置缩放"
@@ -208,6 +212,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
       {/* 放大 */}
       <div className="tooltip tooltip-top" data-tip="放大">
         <button
+          type="button"
           className="btn btn-sm btn-square btn-ghost text-base-content"
           onClick={handleZoomIn}
           aria-label="放大"
@@ -222,6 +227,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
       {/* 适应视图 */}
       <div className="tooltip tooltip-top" data-tip="适应视图">
         <button
+          type="button"
           className="btn btn-sm btn-square btn-ghost text-base-content"
           onClick={handleZoomToFit}
           aria-label="适应视图"
@@ -237,6 +243,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
           <div className="relative" ref={exportMenuRef}>
             <div className="tooltip tooltip-top" data-tip="导出">
               <button
+                type="button"
                 className={`btn btn-sm btn-ghost text-base-content flex items-center gap-1 ${
                   exporting ? "loading" : ""
                 }`}
@@ -257,6 +264,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
             {exportMenuOpen && (
               <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-base-100 border border-base-content/20 rounded-lg shadow-lg p-1 min-w-[160px] z-50">
                 <button
+                  type="button"
                   className="btn btn-sm btn-ghost w-full justify-start text-base-content gap-2"
                   onClick={() => handleExport("pdf")}
                   disabled={!!exporting}
@@ -277,6 +285,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
                   导出 PDF 漫画册
                 </button>
                 <button
+                  type="button"
                   className="btn btn-sm btn-ghost w-full justify-start text-base-content gap-2"
                   onClick={() => handleExport("webtoon")}
                   disabled={!!exporting}
@@ -308,6 +317,7 @@ export const CanvasToolbar = track(function CanvasToolbar({
           <div className="w-px h-6 bg-base-content/20 mx-1" />
           <div className="tooltip tooltip-top" data-tip="一致性评估">
             <button
+              type="button"
               className="btn btn-sm btn-ghost text-base-content"
               onClick={() => setShowConsistency(true)}
               aria-label="一致性评估"

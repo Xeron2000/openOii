@@ -721,6 +721,12 @@ export interface UniverseProjectLinkRead {
 	project_title: string | null;
 }
 
+export interface ImportedCharacterRead {
+	id: number;
+	name: string;
+	project_id: number;
+}
+
 export interface SharedCharacterRead {
 	id: number;
 	universe_id: number;
