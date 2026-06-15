@@ -15,13 +15,8 @@ import { useThemeStore } from "~/stores/themeStore";
 import { useSettingsStore } from "~/stores/settingsStore";
 import type { Project } from "~/types";
 import { Button } from "~/components/ui/Button";
-import { SvgIcon } from "~/components/ui/SvgIcon";
 
 interface TopBarProps {
-	onToggleAssets: () => void;
-	onToggleHistory: () => void;
-	assetsOpen?: boolean;
-	historyOpen?: boolean;
 	projectId?: number;
 }
 
@@ -49,13 +44,13 @@ function ProjectDropdown({ currentId }: { currentId?: number }) {
 			<button
 				type="button"
 				onClick={() => setOpen(!open)}
-				className="flex max-w-[120px] items-center gap-1 text-xs font-heading font-bold transition-colors hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:max-w-[180px]"
+				className="flex h-11 max-w-[132px] items-center gap-1.5 rounded-lg px-2 text-sm font-heading font-bold transition-colors hover:bg-base-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary sm:max-w-[220px]"
 				aria-expanded={open}
 				aria-haspopup="true"
 			>
-				<FilmIcon className="w-3.5 h-3.5 flex-shrink-0 text-primary" />
+				<FilmIcon className="h-4 w-4 flex-shrink-0 text-primary" />
 				<span className="truncate">{list.find((p) => p.id === currentId)?.title || "项目"}</span>
-				<ChevronDownIcon className={`w-3 h-3 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
+				<ChevronDownIcon className={`h-3.5 w-3.5 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
 			</button>
 
 			{open && (
@@ -71,16 +66,16 @@ function ProjectDropdown({ currentId }: { currentId?: number }) {
 					<div className="border-t border-base-content/10 my-1" />
 					{list.map((p) => {
 						const statusMap: Record<string, { label: string; cls: string }> = {
-							draft: { label: "草稿", cls: "text-base-content/30" },
-							planning: { label: "规划中", cls: "text-warning" },
-							ready: { label: "完成", cls: "text-success" },
-							superseded: { label: "已覆盖", cls: "text-base-content/20" },
+							draft: { label: "草稿", cls: "text-base-content/70" },
+							planning: { label: "规划中", cls: "text-base-content" },
+							ready: { label: "完成", cls: "text-base-content" },
+							superseded: { label: "已覆盖", cls: "text-base-content/70" },
 						};
-						const st = statusMap[p.status] ?? { label: p.status, cls: "text-base-content/30" };
+						const st = statusMap[p.status] ?? { label: p.status, cls: "text-base-content/70" };
 						return (
 							<Link
 								key={p.id}
-								to={`/projects/${p.id}`}
+								to={`/project/${p.id}`}
 								onClick={() => setOpen(false)}
 								className={`flex items-center justify-between px-3 py-1.5 text-xs hover:bg-base-300 transition-colors group ${p.id === currentId ? "bg-primary/10 text-primary font-bold" : ""}`}
 							>
@@ -105,79 +100,53 @@ function ProjectDropdown({ currentId }: { currentId?: number }) {
 }
 
 export function TopBar({
-	onToggleAssets,
-	onToggleHistory,
-	assetsOpen,
-	historyOpen,
 	projectId,
 }: TopBarProps) {
 	const { theme, toggleTheme } = useThemeStore();
 	const isDark = theme.endsWith("dark");
 	const { openModal: openSettingsModal } = useSettingsStore();
 
-		const btnCls = "flex items-center whitespace-nowrap !px-1.5 !min-h-0 !h-6 gap-1";
-		const iconCls = "w-3.5 h-3.5";
+	const btnCls = "flex items-center whitespace-nowrap gap-1.5 !px-2.5";
+	const iconCls = "h-4 w-4";
 
-		return (
-			<header className="z-30 flex h-10 flex-shrink-0 items-center gap-2 border-b-2 border-base-content/15 bg-base-100 px-2 sm:gap-3 sm:px-3">
-				<div className="flex min-w-0 items-center gap-2">
-					{projectId ? (
-						<ProjectDropdown currentId={projectId} />
-					) : (
-						<Link to="/" className="font-comic text-lg text-primary font-bold tracking-wider">
-							openOii
-						</Link>
-					)}
-				</div>
+	return (
+		<header className="z-30 flex min-h-14 flex-shrink-0 items-center gap-2 border-b-2 border-base-content/15 bg-base-100 px-3 sm:gap-3 sm:px-4">
+			<div className="flex min-w-0 items-center gap-2">
+				{projectId ? (
+					<ProjectDropdown currentId={projectId} />
+				) : (
+					<Link to="/" className="inline-flex h-11 items-center rounded-lg px-1 font-comic text-xl font-bold tracking-wider text-base-content focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+						openOii
+					</Link>
+				)}
+			</div>
 
-				<div className="min-w-0 flex-1" />
+			<div className="min-w-0 flex-1" />
 
-				<div className="flex shrink-0 items-center gap-1">
-					<Button
-						variant={assetsOpen ? "primary" : "ghost"}
-						size="sm"
-						className={btnCls}
-						onClick={onToggleAssets}
-						title="资产库"
-						aria-label="资产库"
-					>
-						<SvgIcon name="archive" size={14} />
-						<span className="text-xs hidden sm:inline">资产</span>
-					</Button>
-					<Button
-						variant={historyOpen ? "primary" : "ghost"}
-						size="sm"
-						className={btnCls}
-						onClick={onToggleHistory}
-						title="对话历史"
-						aria-label="对话历史"
-					>
-						<SvgIcon name="clock-3" size={14} />
-						<span className="text-xs hidden sm:inline">历史</span>
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						className={btnCls}
-						onClick={toggleTheme}
-						aria-label={isDark ? "切换亮色" : "切换暗色"}
-						title={isDark ? "切换亮色" : "切换暗色"}
-					>
-						{isDark ? <SunIcon className={iconCls} /> : <MoonIcon className={iconCls} />}
-						<span className="text-xs hidden sm:inline">主题</span>
-					</Button>
-					<Button
-						variant="ghost"
-						size="sm"
-						className={btnCls}
-						onClick={openSettingsModal}
-						title="设置"
-						aria-label="设置"
-					>
-						<Cog6ToothIcon className={iconCls} />
-						<span className="text-xs hidden sm:inline">设置</span>
-					</Button>
-				</div>
-			</header>
-		);
+			<div className="flex shrink-0 items-center gap-1">
+				<Button
+					variant="ghost"
+					size="sm"
+					className={btnCls}
+					onClick={toggleTheme}
+					aria-label={isDark ? "主题，切换亮色" : "主题，切换暗色"}
+					title={isDark ? "切换亮色" : "切换暗色"}
+				>
+					{isDark ? <SunIcon className={iconCls} /> : <MoonIcon className={iconCls} />}
+					<span className="hidden text-sm sm:inline">主题</span>
+				</Button>
+				<Button
+					variant="ghost"
+					size="sm"
+					className={btnCls}
+					onClick={openSettingsModal}
+					title="设置"
+					aria-label="设置"
+				>
+					<Cog6ToothIcon className={iconCls} />
+					<span className="hidden text-sm sm:inline">设置</span>
+				</Button>
+			</div>
+		</header>
+	);
 }

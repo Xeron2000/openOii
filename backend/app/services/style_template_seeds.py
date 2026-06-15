@@ -20,8 +20,8 @@ BUILTIN_STYLE_TEMPLATES: list[dict] = [
         "slug": "anime",
         "name": "日系动漫",
         "category": "builtin",
-        "description": "经典日式动画风格，赛璐珞上色，清晰线稿，大眼睛表现",
-        "style_prompt": "anime, 2D illustration, cel-shading, vibrant colors, Japanese animation style",
+        "description": "经典日式动画漫画风格，赛璐珞上色，清晰线稿，漫画表情",
+        "style_prompt": "anime comic style, 2D illustration, clean line art, cel shading, vibrant colors, Japanese animation look",
         "color_palette": ["vibrant", "saturated", "warm"],
         "sort_order": 100,
     },
@@ -29,8 +29,8 @@ BUILTIN_STYLE_TEMPLATES: list[dict] = [
         "slug": "shonen",
         "name": "少年热血",
         "category": "builtin",
-        "description": "高对比明暗，动态构图，夸张透视",
-        "style_prompt": "anime, shonen style, high contrast, dynamic composition, dramatic lighting, bold lines",
+        "description": "高对比明暗，动态构图，夸张透视，热血漫画线条",
+        "style_prompt": "shonen manga/anime style, bold ink lines, high contrast, dynamic composition, dramatic cel-shaded lighting",
         "color_palette": ["high-contrast", "dramatic", "bold"],
         "sort_order": 90,
     },
@@ -38,8 +38,8 @@ BUILTIN_STYLE_TEMPLATES: list[dict] = [
         "slug": "slice-of-life",
         "name": "日常治愈",
         "category": "builtin",
-        "description": "柔和色调，圆润线条，温馨光影",
-        "style_prompt": "anime, slice of life, soft pastel colors, warm lighting, rounded lines, cozy atmosphere",
+        "description": "柔和色调，圆润线条，温馨光影，日常漫画氛围",
+        "style_prompt": "slice-of-life anime comic style, soft pastel colors, warm lighting, rounded lines, cozy hand-drawn atmosphere",
         "color_palette": ["pastel", "soft", "warm"],
         "sort_order": 80,
     },
@@ -48,7 +48,7 @@ BUILTIN_STYLE_TEMPLATES: list[dict] = [
         "name": "黑白漫画",
         "category": "builtin",
         "description": "网点纸，速度线，夸张表情，高对比",
-        "style_prompt": "manga style, black and white, halftone dots, speed lines, high contrast ink",
+        "style_prompt": "manga style, ink line art, halftone dots, speed lines, high contrast comic panels",
         "color_palette": ["monochrome", "high-contrast"],
         "sort_order": 70,
     },
@@ -57,17 +57,18 @@ BUILTIN_STYLE_TEMPLATES: list[dict] = [
         "name": "国风动画",
         "category": "builtin",
         "description": "水墨质感，飘逸线条，东方配色",
-        "style_prompt": "Chinese animation, ink wash, flowing lines, oriental color palette, watercolor textures",
+        "style_prompt": "Chinese animation comic style, flowing ink lines, oriental color palette, watercolor texture, stylized 2D rendering",
         "color_palette": ["oriental", "muted", "ink-wash"],
         "sort_order": 60,
     },
     {
         "slug": "cinematic",
-        "name": "电影质感",
+        "name": "漫画电影感",
         "category": "builtin",
-        "description": "35mm胶片感，自然光，浅景深",
-        "style_prompt": "cinematic, photorealistic, 35mm film grain, natural lighting, shallow depth of field",
-        "color_palette": ["natural", "desaturated", "film"],
+        "description": "漫画分镜关键帧，戏剧光影，电影构图，但保持非照片写实",
+        "style_prompt": "cinematic anime comic style, storyboard keyframe, clean ink line art, cel shading, dramatic lighting, filmic composition without photorealism",
+        "color_palette": ["dramatic", "illustrated", "filmic"],
+        "negative_prompt": "photorealistic, live action, real footage, DSLR photo, realistic skin pores",
         "sort_order": 50,
     },
     {
@@ -110,9 +111,10 @@ BUILTIN_STYLE_TEMPLATES: list[dict] = [
         "slug": "realistic",
         "name": "写实风格",
         "category": "builtin",
-        "description": "照片级真实，自然光影，细节精确",
-        "style_prompt": "photorealistic, natural lighting, detailed textures, real-world proportions",
-        "color_palette": ["natural", "detailed", "realistic"],
+        "description": "半写实漫画比例，清晰线稿，绘制质感，不是照片级真实",
+        "style_prompt": "semi-realistic comic illustration, grounded proportions, clean line art, painted cel shading, not photographic",
+        "color_palette": ["grounded", "illustrated", "semi-realistic"],
+        "negative_prompt": "photorealistic, live action, real footage, DSLR photo",
         "sort_order": 0,
     },
     # --- New styles ---
@@ -121,7 +123,7 @@ BUILTIN_STYLE_TEMPLATES: list[dict] = [
         "name": "国风漫画",
         "category": "builtin",
         "description": "融合国风与漫画，工笔线条，水墨上色，古韵意境",
-        "style_prompt": "guofeng manga, Chinese traditional art, fine ink lines, watercolor coloring, classical oriental atmosphere",
+        "style_prompt": "guofeng manga, Chinese traditional art, fine ink lines, watercolor coloring, classical oriental comic atmosphere",
         "color_palette": ["oriental", "ink-wash", "classical"],
         "sort_order": 65,
     },
@@ -130,7 +132,7 @@ BUILTIN_STYLE_TEMPLATES: list[dict] = [
         "name": "赛博朋克",
         "category": "builtin",
         "description": "霓虹灯光，暗黑都市，科技感与破败并存",
-        "style_prompt": "cyberpunk, neon lights, dark urban, high-tech low-life, rain-slicked streets, holographic",
+        "style_prompt": "cyberpunk anime comic style, neon lights, dark urban atmosphere, rain-slicked streets, holographic accents, clean line art",
         "color_palette": ["neon", "dark", "futuristic"],
         "negative_prompt": "bright, sunny, cheerful, pastoral",
         "sort_order": 45,
@@ -152,9 +154,7 @@ async def ensure_builtin_templates(session: AsyncSession) -> None:
     inserted = 0
     for seed in BUILTIN_STYLE_TEMPLATES:
         slug = seed["slug"]
-        res = await session.execute(
-            select(StyleTemplate).where(StyleTemplate.slug == slug)
-        )
+        res = await session.execute(select(StyleTemplate).where(StyleTemplate.slug == slug))
         if res.scalar_one_or_none() is not None:
             continue
         template = StyleTemplate(

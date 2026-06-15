@@ -1,16 +1,23 @@
-import type { ProjectProviderOverridesPayload } from "~/types";
+import type {
+  ImageProviderKey,
+  ProjectProviderOverridesPayload,
+  TextProviderKey,
+  VideoProviderKey,
+} from "~/types";
 
 type ProviderModality = "text" | "image" | "video";
+type ProviderKey = TextProviderKey | ImageProviderKey | VideoProviderKey;
+type ProviderOption = "inherit-default" | ProviderKey;
 
 interface ProviderFieldConfig {
   modality: ProviderModality;
   title: string;
   description: string;
   overrideKey: keyof ProjectProviderOverridesPayload;
-  options: readonly string[];
+  options: readonly ProviderOption[];
 }
 
-type ProviderDefaultKeys = Record<ProviderModality, string>;
+type ProviderDefaultKeys = Record<ProviderModality, ProviderKey>;
 
 interface ProviderSelectionFieldsProps {
   value: ProjectProviderOverridesPayload;
@@ -25,7 +32,12 @@ export const TEXT_PROVIDER_OPTIONS = [
   "openai",
   "fake",
 ] as const;
-export const IMAGE_PROVIDER_OPTIONS = ["inherit-default", "openai", "fake"] as const;
+export const IMAGE_PROVIDER_OPTIONS = [
+  "inherit-default",
+  "openai",
+  "modelscope",
+  "fake",
+] as const;
 export const VIDEO_PROVIDER_OPTIONS = [
   "inherit-default",
   "openai",
@@ -59,7 +71,7 @@ const PROVIDER_FIELDS: ProviderFieldConfig[] = [
 
 const FALLBACK_DEFAULT_KEYS: ProviderDefaultKeys = {
   text: "anthropic",
-  image: "openai",
+  image: "modelscope",
   video: "openai",
 };
 
@@ -69,6 +81,8 @@ function getProviderLabel(key: string): string {
       return "Anthropic";
     case "openai":
       return "OpenAI";
+    case "modelscope":
+      return "ModelScope";
     case "doubao":
       return "Doubao";
     case "fake":

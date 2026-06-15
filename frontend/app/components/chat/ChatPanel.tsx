@@ -20,11 +20,8 @@ import { getWorkflowStageInfo } from "~/utils/workflowStage";
 interface ChatPanelProps {
   onSendFeedback: (content: string) => void;
   onConfirm: (feedback?: string) => void;
-  onGenerate: () => void;
   onCancel: () => void;
   isGenerating: boolean;
-  generateDisabled?: boolean;
-  generateDisabledReason?: string;
   isPaused?: boolean;
   onPause?: () => void;
   onResume?: () => void;
@@ -42,16 +39,12 @@ const agentNameMap = AGENT_NAME_MAP;
 export function ChatPanel({
   onSendFeedback,
   onConfirm,
-  onGenerate,
   onCancel,
   isGenerating,
-  generateDisabled = false,
-  generateDisabledReason,
   isPaused = false,
   onPause,
   onResume: _onResume,
 }: ChatPanelProps) {
-  const generateDisabledReasonId = generateDisabledReason ? "generate-disabled-reason" : undefined;
   const {
     messages,
     currentAgent,
@@ -78,10 +71,14 @@ export function ChatPanel({
 
   useEffect(() => {
     if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTo({
-        top: scrollContainerRef.current.scrollHeight,
-        behavior: "smooth",
-      });
+      if (typeof scrollContainerRef.current.scrollTo === "function") {
+        scrollContainerRef.current.scrollTo({
+          top: scrollContainerRef.current.scrollHeight,
+          behavior: "smooth",
+        });
+      } else {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      }
     }
   }, [messages]);
 
@@ -96,8 +93,12 @@ export function ChatPanel({
     setInput("");
   };
 
-  const info = getWorkflowStageInfo(currentStage);
-  const StageIcon = getStageIcon(currentStage);
+  const fallbackStage = currentStage || "plan";
+  const info = getWorkflowStageInfo(fallbackStage) ?? {
+    title: "规划阶段",
+    description: "正在生成剧本、角色与镜头规划",
+  };
+  const StageIcon = getStageIcon(fallbackStage);
   const hasMessages = messages.length > 0;
   const agentDisplayName = awaitingAgent ? agentNameMap[awaitingAgent] || awaitingAgent : "";
   const isYolo = runMode === "yolo";
@@ -125,18 +126,18 @@ export function ChatPanel({
         <button
           type="button"
           onClick={handleRunModeToggle}
-          className={`btn btn-xs gap-0.5 ${isYolo ? "btn-primary btn-sm border-2" : "btn-ghost"} !min-h-0 !h-6 text-xs font-comic`}
+          className={`btn min-h-11 h-11 gap-1 px-3 text-xs font-heading font-bold ${isYolo ? "btn-primary border-2" : "btn-ghost"}`}
           aria-label={isYolo ? "切换精细审阅模式" : "切换快速生成模式"}
           title={isYolo ? "快速生成：自动确认" : "精细审阅：逐阶段确认"}
         >
           {isYolo ? (
             <>
-              <BoltIcon className="w-2.5 h-2.5" />
+              <BoltIcon className="h-4 w-4" />
               快速
             </>
           ) : (
             <>
-              <AdjustmentsHorizontalIcon className="w-2.5 h-2.5" />
+              <AdjustmentsHorizontalIcon className="h-4 w-4" />
               审阅
             </>
           )}
@@ -158,10 +159,10 @@ export function ChatPanel({
             size="sm"
             variant="ghost"
             onClick={onCancel}
-            className="text-error hover:bg-error/10 gap-0.5 !px-1 !py-0 !min-h-0 !h-auto text-xs"
+            className="min-h-11 gap-1 px-3 text-error hover:bg-error/10"
             aria-label="停止生成"
           >
-            <StopIcon className="w-3 h-3" /> 停止
+            <StopIcon className="h-4 w-4" /> 停止
           </Button>
         </div>
       )}
@@ -174,27 +175,8 @@ export function ChatPanel({
                 <StageIcon className="w-4 h-4 text-primary" aria-hidden="true" />
               </div>
               <p className="text-xs text-base-content/50 mb-3 max-w-xs">
-                {isYolo
-                  ? "点击开始，AI 自动推进生成"
-                  : "点击开始，AI 根据你的故事生成漫剧"}
+                当前阶段暂无对话
               </p>
-              <Button
-                variant="primary"
-                size="lg"
-                onClick={onGenerate}
-                disabled={generateDisabled}
-                className="gap-1.5 touch-target btn-comic"
-                aria-label="开始生成漫剧"
-                aria-describedby={generateDisabledReasonId}
-              >
-                <RocketLaunchIcon className="w-4 h-4" aria-hidden="true" />
-                开始生成
-              </Button>
-              {generateDisabledReason && (
-                <p id={generateDisabledReasonId} className="mt-1.5 max-w-xs text-xs text-warning" aria-live="polite">
-                  {generateDisabledReason}
-                </p>
-              )}
             </div>
           </div>
         ) : (
@@ -233,9 +215,9 @@ export function ChatPanel({
                 onConfirm(feedback || undefined);
                 setInput("");
               }}
-              className="gap-0.5 !px-2.5 !py-0.5 !min-h-0 !h-6 text-xs border-2 shadow-brutal-sm"
+              className="min-h-11 gap-1 border-2 px-3 shadow-brutal-sm"
             >
-              <CheckIcon className="w-3 h-3" />
+              <CheckIcon className="h-4 w-4" />
               通过
             </Button>
           </div>
@@ -244,9 +226,9 @@ export function ChatPanel({
 
       {awaitingConfirm && isYolo && isPaused && onPause && (
         <div className="px-2.5 py-1 border-t border-base-content/10 bg-primary/5 flex items-center gap-1.5 text-xs text-base-content/50">
-          <BoltIcon className="w-2.5 h-2.5" />
+          <BoltIcon className="h-4 w-4" />
           快速生成已暂停
-          <Button size="sm" variant="ghost" onClick={onPause} className="ml-auto !px-1.5 !py-0 !min-h-0 !h-auto text-xs">
+          <Button size="sm" variant="ghost" onClick={onPause} className="ml-auto min-h-11 px-3">
             继续
           </Button>
         </div>

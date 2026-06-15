@@ -32,8 +32,13 @@ def test_extract_url_from_text_handles_data_and_wrapped_urls():
     settings = Settings(database_url="sqlite+aiosqlite:///:memory:")
     service = ImageService(settings)
 
-    assert service._extract_url_from_text("data:image/png;base64,abc") == "data:image/png;base64,abc"
-    assert service._extract_url_from_text("see https://cdn.example.com/a.png).") == "https://cdn.example.com/a.png"
+    assert (
+        service._extract_url_from_text("data:image/png;base64,abc") == "data:image/png;base64,abc"
+    )
+    assert (
+        service._extract_url_from_text("see https://cdn.example.com/a.png).")
+        == "https://cdn.example.com/a.png"
+    )
     assert (
         service._extract_url_from_text("![image_1](data:image/png;base64,aGVsbG8=)")
         == "data:image/png;base64,aGVsbG8="
@@ -41,11 +46,31 @@ def test_extract_url_from_text_handles_data_and_wrapped_urls():
     assert service._extract_url_from_text("no url here") is None
 
 
+def test_extract_url_from_chat_completion_payload():
+    settings = Settings(database_url="sqlite+aiosqlite:///:memory:")
+    service = ImageService(settings)
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "![image_1](data:image/png;base64,aGVsbG8=)",
+                }
+            }
+        ]
+    }
+
+    assert service._extract_url_from_payload(payload) == "data:image/png;base64,aGVsbG8="
+
+
 def test_sanitize_url_strips_wrappers():
     settings = Settings(database_url="sqlite+aiosqlite:///:memory:")
     service = ImageService(settings)
 
-    assert service._sanitize_url('"https://cdn.example.com/a.png],"') == "https://cdn.example.com/a.png"
+    assert (
+        service._sanitize_url('"https://cdn.example.com/a.png],"')
+        == "https://cdn.example.com/a.png"
+    )
 
 
 @pytest.mark.asyncio
@@ -54,7 +79,10 @@ async def test_cache_external_image_skips_non_http_urls(monkeypatch):
     service = ImageService(settings)
 
     assert await service.cache_external_image("") == ""
-    assert await service.cache_external_image("data:image/png;base64,abc") == "data:image/png;base64,abc"
+    assert (
+        await service.cache_external_image("data:image/png;base64,abc")
+        == "data:image/png;base64,abc"
+    )
     assert await service.cache_external_image("/static/images/a.png") == "/static/images/a.png"
     assert await service.cache_external_image("file:///tmp/a.png") == "file:///tmp/a.png"
 
@@ -100,7 +128,10 @@ async def test_cache_external_image_returns_original_on_failure(monkeypatch):
 
     monkeypatch.setattr(service, "_get_cache_client", boom)
 
-    assert await service.cache_external_image("https://cdn.example.com/a.png") == "https://cdn.example.com/a.png"
+    assert (
+        await service.cache_external_image("https://cdn.example.com/a.png")
+        == "https://cdn.example.com/a.png"
+    )
 
 
 @pytest.mark.asyncio
@@ -120,6 +151,7 @@ async def test_cache_external_image_saves_data_url(monkeypatch, tmp_path):
 async def test_generate_url_dalle(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -139,6 +171,7 @@ async def test_generate_url_dalle(monkeypatch):
 async def test_generate_url_chat_completions(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/chat/completions",
         image_api_key="test",
@@ -158,6 +191,7 @@ async def test_generate_url_chat_completions(monkeypatch):
 async def test_generate_url_chat_completions_extracts_markdown_data_url(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/chat/completions",
         image_api_key="test",
@@ -177,6 +211,7 @@ async def test_generate_url_chat_completions_extracts_markdown_data_url(monkeypa
 async def test_generate_url_dalle_accepts_b64_json(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -202,7 +237,8 @@ async def test_generate_url_modelscope(monkeypatch):
     )
     service = ImageService(settings)
 
-    async def fake_modelscope(prompt):
+    async def fake_modelscope(prompt, image_bytes=None):
+        assert image_bytes is None
         return "https://modelscope.example.com/image.png"
 
     monkeypatch.setattr(service, "_modelscope_generate", fake_modelscope)
@@ -215,6 +251,7 @@ async def test_generate_url_modelscope(monkeypatch):
 async def test_generate_url_fallback_from_i2i(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -239,6 +276,7 @@ async def test_generate_url_fallback_from_i2i(monkeypatch):
 async def test_generate_url_uses_dalle_payload_when_image_bytes_without_i2i(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -265,6 +303,7 @@ async def test_generate_url_uses_dalle_payload_when_image_bytes_without_i2i(monk
 async def test_generate_url_raises_when_stream_has_no_url(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/chat/completions",
         image_api_key="test",
@@ -299,6 +338,7 @@ async def test_close_noops_when_cache_client_already_closed(monkeypatch):
 async def test_post_json_with_retry_retries_then_succeeds(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -329,19 +369,26 @@ async def test_post_json_with_retry_retries_then_succeeds(monkeypatch):
             calls["count"] += 1
             return FakeResponse(503 if calls["count"] == 1 else 200)
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
+
     async def fake_sleep(*args, **kwargs):
         return None
 
     monkeypatch.setattr("app.services.image.asyncio.sleep", fake_sleep)
 
-    assert await service._post_json_with_retry("https://example.com", {"prompt": "x"}) == {"ok": True}
+    assert await service._post_json_with_retry("https://example.com", {"prompt": "x"}) == {
+        "ok": True
+    }
     assert calls["count"] == 2
 
 
 @pytest.mark.asyncio
 async def test_post_stream_with_retry_collects_reasoning_content(monkeypatch):
-    settings = Settings(database_url="sqlite+aiosqlite:///:memory:", image_base_url="https://img.example.com")
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:", image_base_url="https://img.example.com", image_provider="openai"
+    )
     service = ImageService(settings, max_retries=1)
 
     class FakeResponse:
@@ -372,9 +419,14 @@ async def test_post_stream_with_retry_collects_reasoning_content(monkeypatch):
         def stream(self, *args, **kwargs):
             return FakeStream()
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
 
-    assert await service._post_stream_with_retry("https://example.com", {"stream": True}) == "url: https://cdn.example.com/a.png"
+    assert (
+        await service._post_stream_with_retry("https://example.com", {"stream": True})
+        == "url: https://cdn.example.com/a.png"
+    )
 
 
 @pytest.mark.asyncio
@@ -415,9 +467,14 @@ async def test_modelscope_generate_returns_first_url(monkeypatch):
             self.calls += 1
             if self.calls == 1:
                 return FakeResponse({"task_status": "RUNNING"})
-            return FakeResponse({"task_status": "SUCCEED", "output_images": ["https://cdn.example.com/a.png"]})
+            return FakeResponse(
+                {"task_status": "SUCCEED", "output_images": ["https://cdn.example.com/a.png"]}
+            )
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
+
     async def fake_sleep(*args, **kwargs):
         return None
 
@@ -426,8 +483,160 @@ async def test_modelscope_generate_returns_first_url(monkeypatch):
     assert await service._modelscope_generate("cat") == "https://cdn.example.com/a.png"
 
 
+@pytest.mark.asyncio
+async def test_modelscope_generate_sends_image_bytes_as_data_url(monkeypatch):
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        image_base_url="https://api.modelscope.cn",
+        image_endpoint="/v1/images/generations",
+        image_api_key="token",
+        image_model="FireRedTeam/FireRed-Image-Edit-1.1",
+    )
+    service = ImageService(settings)
+    seen_payload = {}
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            seen_payload.update(kwargs["json"])
+            return FakeResponse({"task_id": "t1"})
+
+        async def get(self, *args, **kwargs):
+            return FakeResponse(
+                {"task_status": "SUCCEED", "output_images": ["https://cdn.example.com/a.png"]}
+            )
+
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
+
+    assert (
+        await service._modelscope_generate("turn hair blue", image_bytes=b"\x89PNGfake")
+        == "https://cdn.example.com/a.png"
+    )
+    assert seen_payload["image_url"].startswith("data:image/png;base64,")
+
+
+@pytest.mark.asyncio
+async def test_modelscope_text_model_does_not_send_image_url(monkeypatch):
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="modelscope",
+        image_base_url="https://api-inference.modelscope.cn",
+        image_endpoint="/v1/images/generations",
+        image_api_key="token",
+        image_model="Tongyi-MAI/Z-Image-Turbo",
+    )
+    service = ImageService(settings)
+    seen_payload = {}
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            seen_payload.update(kwargs["json"])
+            return FakeResponse({"task_id": "t1"})
+
+        async def get(self, *args, **kwargs):
+            return FakeResponse(
+                {"task_status": "SUCCEED", "output_images": ["https://cdn.example.com/a.png"]}
+            )
+
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
+
+    assert (
+        await service._modelscope_generate("A golden cat", image_bytes=b"\x89PNGfake")
+        == "https://cdn.example.com/a.png"
+    )
+    assert seen_payload == {
+        "model": "Tongyi-MAI/Z-Image-Turbo",
+        "prompt": "A golden cat",
+    }
+
+
+@pytest.mark.asyncio
+async def test_modelscope_edit_model_without_image_uses_blank_canvas(monkeypatch):
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        image_base_url="https://api.modelscope.cn",
+        image_endpoint="/v1/images/generations",
+        image_api_key="token",
+        image_model="FireRedTeam/FireRed-Image-Edit-1.1",
+    )
+    service = ImageService(settings)
+    seen_payload = {}
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self._payload
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post(self, *args, **kwargs):
+            seen_payload.update(kwargs["json"])
+            return FakeResponse({"task_id": "t1"})
+
+        async def get(self, *args, **kwargs):
+            return FakeResponse(
+                {"task_status": "SUCCEED", "output_images": ["https://cdn.example.com/a.png"]}
+            )
+
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
+
+    assert await service._modelscope_generate("draw character") == "https://cdn.example.com/a.png"
+    assert seen_payload["image_url"].startswith("data:image/png;base64,")
+
+
 def test_is_modelscope_api_false_for_non_modelscope_host():
-    settings = Settings(database_url="sqlite+aiosqlite:///:memory:")
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
+        image_base_url="https://img.example.com",
+    )
     service = ImageService(settings)
 
     assert service._is_modelscope_api() is False
@@ -445,6 +654,7 @@ def test_extract_url_from_text_handles_invalid_inputs():
 async def test_post_json_with_retry_breaks_on_non_retryable_status(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -467,10 +677,14 @@ async def test_post_json_with_retry_breaks_on_non_retryable_status(monkeypatch):
         async def post(self, url, headers, json):
             return FakeResponse()
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
 
     with pytest.raises(RuntimeError, match="failed after retries"):
-        await service._post_json_with_retry("https://img.example.com/images/generations", {"prompt": "cat"})
+        await service._post_json_with_retry(
+            "https://img.example.com/images/generations", {"prompt": "cat"}
+        )
 
 
 @pytest.mark.asyncio
@@ -483,12 +697,38 @@ async def test_generate_url_returns_modelscope_result_with_image_bytes(monkeypat
     )
     service = ImageService(settings)
 
-    async def fake_modelscope(prompt):
+    async def fake_modelscope(prompt, image_bytes=None):
+        assert image_bytes == b"fake"
         return "https://modelscope.example.com/image.png"
 
     monkeypatch.setattr(service, "_modelscope_generate", fake_modelscope)
 
-    assert await service.generate_url(prompt="cat", image_bytes=b"fake") == "https://modelscope.example.com/image.png"
+    assert (
+        await service.generate_url(prompt="cat", image_bytes=b"fake")
+        == "https://modelscope.example.com/image.png"
+    )
+
+
+@pytest.mark.asyncio
+async def test_generate_returns_modelscope_response(monkeypatch):
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        image_base_url="https://api.modelscope.cn",
+        image_endpoint="/v1/images/generations",
+        image_api_key="test",
+    )
+    service = ImageService(settings)
+
+    async def fake_modelscope(prompt, image_bytes=None):
+        assert prompt == "cat"
+        assert image_bytes is None
+        return "https://modelscope.example.com/image.png"
+
+    monkeypatch.setattr(service, "_modelscope_generate", fake_modelscope)
+
+    assert await service.generate(prompt="cat") == {
+        "data": [{"url": "https://modelscope.example.com/image.png"}]
+    }
 
 
 @pytest.mark.asyncio
@@ -515,9 +755,13 @@ async def test_post_json_with_retry_returns_json_on_success(monkeypatch):
         async def post(self, url, headers, json):
             return FakeResponse()
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
 
-    assert await service._post_json_with_retry("https://img.example.com/images/generations", {"prompt": "cat"}) == {"ok": True}
+    assert await service._post_json_with_retry(
+        "https://img.example.com/images/generations", {"prompt": "cat"}
+    ) == {"ok": True}
 
 
 @pytest.mark.asyncio
@@ -584,7 +828,7 @@ async def test_modelscope_generate_success(monkeypatch):
 
         async def aiter_lines(self):
             yield 'data: {"choices":[{"delta":{"content":"https://cdn.example.com/modelscope.png"}}]}'
-            yield 'data: [DONE]'
+            yield "data: [DONE]"
 
     class FakeStreamCtx:
         def __init__(self):
@@ -607,12 +851,20 @@ async def test_modelscope_generate_success(monkeypatch):
             return FakeResponse({"task_id": "task-1"})
 
         async def get(self, url, headers):
-            return FakeResponse({"task_status": "SUCCEED", "output_images": ["https://cdn.example.com/modelscope.png"]})
+            return FakeResponse(
+                {
+                    "task_status": "SUCCEED",
+                    "output_images": ["https://cdn.example.com/modelscope.png"],
+                }
+            )
 
         def stream(self, *args, **kwargs):
             return FakeStreamCtx()
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
+
     async def fake_sleep(_):
         return None
 
@@ -649,7 +901,9 @@ async def test_modelscope_generate_missing_task_id_raises(monkeypatch):
         async def post(self, url, headers, json):
             return FakeResponse()
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
 
     with pytest.raises(RuntimeError, match="task_id"):
         await service._modelscope_generate("cat")
@@ -659,6 +913,7 @@ async def test_modelscope_generate_missing_task_id_raises(monkeypatch):
 async def test_post_stream_with_retry_handles_retryable_status(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/chat/completions",
         image_api_key="test",
@@ -692,14 +947,19 @@ async def test_post_stream_with_retry_handles_retryable_status(monkeypatch):
         def stream(self, *args, **kwargs):
             return FakeStreamCtx()
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
+
     async def fake_sleep(_):
         return None
 
     monkeypatch.setattr("app.services.image.asyncio.sleep", fake_sleep)
 
     with pytest.raises(RuntimeError, match="failed after retries"):
-        await service._post_stream_with_retry("https://img.example.com/chat/completions", {"prompt": "cat"})
+        await service._post_stream_with_retry(
+            "https://img.example.com/chat/completions", {"prompt": "cat"}
+        )
 
 
 @pytest.mark.asyncio
@@ -734,9 +994,16 @@ async def test_post_stream_with_retry_returns_text(monkeypatch):
         def stream(self, *args, **kwargs):
             return FakeStream()
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
 
-    assert await service._post_stream_with_retry("https://img.example.com/chat/completions", {"stream": True}) == "https://cdn.example.com/image.png"
+    assert (
+        await service._post_stream_with_retry(
+            "https://img.example.com/chat/completions", {"stream": True}
+        )
+        == "https://cdn.example.com/image.png"
+    )
 
 
 @pytest.mark.asyncio
@@ -771,7 +1038,9 @@ async def test_post_stream_with_retry_collects_direct_payload_url(monkeypatch):
         def stream(self, *args, **kwargs):
             return FakeStream()
 
-    monkeypatch.setattr("app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient())
+    monkeypatch.setattr(
+        "app.services.image.httpx.AsyncClient", lambda *args, **kwargs: FakeClient()
+    )
 
     assert (
         await service._post_stream_with_retry(
@@ -987,6 +1256,7 @@ async def test_modelscope_generate_timeout(monkeypatch):
 async def test_generate_includes_style_in_payload(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -1009,6 +1279,7 @@ async def test_generate_includes_style_in_payload(monkeypatch):
 async def test_generate_chat_completions_uses_messages(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/chat/completions",
         image_api_key="test",
@@ -1035,6 +1306,7 @@ async def test_generate_chat_completions_uses_messages(monkeypatch):
 async def test_generate_url_i2i_chat_completions_multimodal(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/chat/completions",
         image_api_key="test",
@@ -1058,6 +1330,42 @@ async def test_generate_url_i2i_chat_completions_multimodal(monkeypatch):
     assert isinstance(content, list)
     assert content[0]["type"] == "text"
     assert content[1]["type"] == "image_url"
+    assert content[1]["image_url"]["url"].startswith("data:image/")
+
+
+@pytest.mark.asyncio
+async def test_generate_url_i2i_chat_completions_compresses_reference(monkeypatch):
+    from io import BytesIO
+
+    from PIL import Image
+
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
+        image_base_url="https://img.example.com",
+        image_endpoint="/chat/completions",
+        image_api_key="test",
+        enable_image_to_image=True,
+    )
+    service = ImageService(settings)
+    image = Image.new("RGB", (1400, 1400), "gold")
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    original = buffer.getvalue()
+    seen = {}
+
+    async def fake_stream(url, payload):
+        seen.update(payload)
+        return "https://cdn.example.com/i2i.png"
+
+    monkeypatch.setattr(service, "_post_stream_with_retry", fake_stream)
+
+    await service.generate_url(prompt="cat", image_bytes=original)
+    content = seen["messages"][0]["content"]
+    data_url = content[1]["image_url"]["url"]
+
+    assert data_url.startswith("data:image/jpeg;base64,")
+    assert len(data_url) < len("data:image/png;base64,") + len(original) * 4 // 3
 
 
 # --- generate_url i2i + standard API ---
@@ -1067,6 +1375,7 @@ async def test_generate_url_i2i_chat_completions_multimodal(monkeypatch):
 async def test_generate_url_i2i_standard_api(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -1094,6 +1403,7 @@ async def test_generate_url_i2i_standard_api(monkeypatch):
 async def test_generate_url_i2i_standard_api_missing_url(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -1248,7 +1558,10 @@ def test_extract_url_from_text_handles_http_url():
     settings = Settings(database_url="sqlite+aiosqlite:///:memory:")
     service = ImageService(settings)
 
-    assert service._extract_url_from_text("http://cdn.example.com/a.png") == "http://cdn.example.com/a.png"
+    assert (
+        service._extract_url_from_text("http://cdn.example.com/a.png")
+        == "http://cdn.example.com/a.png"
+    )
 
 
 # --- download_and_save edge cases ---
@@ -1340,6 +1653,7 @@ async def test_generate_returns_raw_response_even_when_empty(monkeypatch):
     """generate() returns raw JSON from _post_json_with_retry without validation."""
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/images/generations",
         image_api_key="test",
@@ -1363,6 +1677,7 @@ async def test_post_stream_breaks_on_non_retryable_status(monkeypatch):
     """Lines 322-326: non-retryable status code breaks immediately."""
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="openai",
         image_base_url="https://img.example.com",
         image_endpoint="/chat/completions",
         image_api_key="test",

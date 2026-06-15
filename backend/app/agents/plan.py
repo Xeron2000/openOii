@@ -135,16 +135,31 @@ def _resolve_shot_character_ids(shot_data: dict, characters: list[Character]) ->
 
     names = shot_data.get("characters") or shot_data.get("character_names")
     if isinstance(names, list):
-        normalized = {name.strip().lower() for name in names if isinstance(name, str) and name.strip()}
-        ids = [character.id for character in characters if character.id is not None and character.name.strip().lower() in normalized]
+        normalized = {
+            name.strip().lower() for name in names if isinstance(name, str) and name.strip()
+        }
+        ids = [
+            character.id
+            for character in characters
+            if character.id is not None and character.name.strip().lower() in normalized
+        ]
         if ids:
             return ids
 
     text = " ".join(
-        value for value in (shot_data.get("description"), shot_data.get("action"), shot_data.get("dialogue"))
+        value
+        for value in (
+            shot_data.get("description"),
+            shot_data.get("action"),
+            shot_data.get("dialogue"),
+        )
         if isinstance(value, str)
     )
-    mentioned = [character.id for character in characters if character.id is not None and character.name and character.name in text]
+    mentioned = [
+        character.id
+        for character in characters
+        if character.id is not None and character.name and character.name in text
+    ]
     if mentioned:
         return mentioned
 
@@ -490,6 +505,8 @@ class PlanAgent(BaseAgent):
             for key in ("title", "style", "status", "summary"):
                 val = project_update.get(key)
                 if isinstance(val, str) and val.strip():
+                    if key == "style" and getattr(ctx.project, "style", None):
+                        continue
                     setattr(ctx.project, key, val.strip())
                     updated_fields[key] = val.strip()
 
@@ -524,6 +541,7 @@ class PlanAgent(BaseAgent):
         if getattr(ctx.project, "universe_id", None) and not is_incremental:
             try:
                 from app.services.universe_service import UniverseService
+
                 svc = UniverseService(ctx.session)
                 imported = await svc.auto_import_shared_characters(ctx.project.id)
                 if imported:

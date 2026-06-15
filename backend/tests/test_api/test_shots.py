@@ -76,6 +76,117 @@ async def test_list_shots(async_client, test_session):
 
 
 @pytest.mark.asyncio
+async def test_reorder_project_shots_updates_orders_atomically(
+    async_client, test_session, ws_manager
+):
+    project = await create_project(test_session)
+    first = await create_shot(test_session, project_id=project.id, order=1)
+    second = await create_shot(test_session, project_id=project.id, order=2)
+    third = await create_shot(test_session, project_id=project.id, order=3)
+
+    res = await async_client.patch(
+        f"/api/v1/projects/{project.id}/shots/reorder",
+        json={
+            "items": [
+                {"shot_id": third.id, "order": 1},
+                {"shot_id": first.id, "order": 2},
+                {"shot_id": second.id, "order": 3},
+            ]
+        },
+    )
+
+    assert res.status_code == 200
+    body = res.json()
+    assert [shot["id"] for shot in body["shots"]] == [third.id, first.id, second.id]
+    assert [shot["order"] for shot in body["shots"]] == [1, 2, 3]
+
+    list_res = await async_client.get(f"/api/v1/projects/{project.id}/shots")
+    assert [shot["id"] for shot in list_res.json()] == [third.id, first.id, second.id]
+    assert ws_manager.events[-1][0] == project.id
+    assert ws_manager.events[-1][1]["type"] == "shots_reordered"
+    assert [shot["id"] for shot in ws_manager.events[-1][1]["data"]["shots"]] == [
+        third.id,
+        first.id,
+        second.id,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_reorder_project_shots_marks_existing_final_video_superseded(
+    async_client, test_session, ws_manager
+):
+    project = await create_project(test_session)
+    project.video_url = "http://test.com/final.mp4"
+    test_session.add(project)
+    await test_session.commit()
+    await test_session.refresh(project)
+    first = await create_shot(test_session, project_id=project.id, order=1)
+    second = await create_shot(test_session, project_id=project.id, order=2)
+
+    res = await async_client.patch(
+        f"/api/v1/projects/{project.id}/shots/reorder",
+        json={
+            "items": [
+                {"shot_id": second.id, "order": 1},
+                {"shot_id": first.id, "order": 2},
+            ]
+        },
+    )
+
+    assert res.status_code == 200
+    await test_session.refresh(project)
+    assert project.video_url == "http://test.com/final.mp4"
+    assert project.status == "superseded"
+    assert [event[1]["type"] for event in ws_manager.events[-2:]] == [
+        "shots_reordered",
+        "project_updated",
+    ]
+    assert ws_manager.events[-1][1]["data"]["project"]["status"] == "superseded"
+
+
+@pytest.mark.asyncio
+async def test_reorder_project_shots_rejects_invalid_payloads(async_client, test_session):
+    project = await create_project(test_session)
+    other_project = await create_project(test_session)
+    first = await create_shot(test_session, project_id=project.id, order=1)
+    second = await create_shot(test_session, project_id=project.id, order=2)
+    other = await create_shot(test_session, project_id=other_project.id, order=1)
+
+    duplicate_res = await async_client.patch(
+        f"/api/v1/projects/{project.id}/shots/reorder",
+        json={
+            "items": [
+                {"shot_id": first.id, "order": 1},
+                {"shot_id": first.id, "order": 2},
+            ]
+        },
+    )
+    assert duplicate_res.status_code == 400
+
+    gap_res = await async_client.patch(
+        f"/api/v1/projects/{project.id}/shots/reorder",
+        json={
+            "items": [
+                {"shot_id": first.id, "order": 1},
+                {"shot_id": second.id, "order": 3},
+            ]
+        },
+    )
+    assert gap_res.status_code == 400
+
+    other_project_res = await async_client.patch(
+        f"/api/v1/projects/{project.id}/shots/reorder",
+        json={
+            "items": [
+                {"shot_id": first.id, "order": 1},
+                {"shot_id": other.id, "order": 2},
+            ]
+        },
+    )
+    assert other_project_res.status_code == 400
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("method", ["put", "patch"])
 async def test_update_shot(async_client, test_session, method):
     project = await create_project(test_session)

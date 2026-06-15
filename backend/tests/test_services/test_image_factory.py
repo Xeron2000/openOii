@@ -19,6 +19,19 @@ def test_create_image_service_openai():
     assert isinstance(svc, ImageService)
 
 
+def test_create_image_service_modelscope():
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        image_provider="modelscope",
+        image_base_url="https://api-inference.modelscope.cn",
+        image_api_key="test",
+    )
+    svc = create_image_service(settings)
+    from app.services.image import ImageService
+
+    assert isinstance(svc, ImageService)
+
+
 def test_create_image_service_fake():
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
 
@@ -11,7 +11,6 @@ import { useSettingsStore } from "./stores/settingsStore";
 // 路由懒加载
 const HomePage = lazy(() => import("./pages/HomePage").then(m => ({ default: m.HomePage })));
 const ProjectsPage = lazy(() => import("./pages/ProjectsPage").then(m => ({ default: m.ProjectsPage })));
-const NewProjectPage = lazy(() => import("./pages/NewProjectPage").then(m => ({ default: m.NewProjectPage })));
 const ProjectPage = lazy(() => import("./pages/ProjectPage").then(m => ({ default: m.ProjectPage })));
 const UniversesPage = lazy(() => import("./pages/UniversesPage").then(m => ({ default: m.UniversesPage })));
 const UniverseDetailPage = lazy(() => import("./pages/UniverseDetailPage").then(m => ({ default: m.UniverseDetailPage })));
@@ -51,7 +50,7 @@ export function App() {
             <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/projects" element={<ProjectsPage />} />
-              <Route path="/project/new" element={<NewProjectPage />} />
+              <Route path="/project/new" element={<Navigate to="/" replace />} />
               <Route path="/project/:id" element={<ProjectPage />} />
               <Route path="/projects/:id" element={<ProjectPage />} />
               <Route path="/universes" element={<UniversesPage />} />

@@ -36,11 +36,14 @@ describe('ProviderSelectionFields', () => {
       within(textFieldset as HTMLElement).getByRole('radio', { name: '继承默认（当前：Anthropic）' })
     ).toBeChecked();
     expect(
-      within(imageFieldset as HTMLElement).getByRole('radio', { name: '继承默认（当前：OpenAI）' })
+      within(imageFieldset as HTMLElement).getByRole('radio', { name: '继承默认（当前：ModelScope）' })
     ).toBeChecked();
     expect(
       within(videoFieldset as HTMLElement).getByRole('radio', { name: '继承默认（当前：OpenAI）' })
     ).toBeChecked();
+    expect(
+      within(imageFieldset as HTMLElement).getByRole('radio', { name: 'ModelScope' })
+    ).toBeInTheDocument();
     expect(
       within(videoFieldset as HTMLElement).getByRole('radio', { name: 'Fake（本地测试）' })
     ).toBeInTheDocument();

@@ -25,6 +25,8 @@ export function MessageInput({
   return (
     <div className="flex gap-2">
       <input
+        id="chat-message-input"
+        name="message"
         type="text"
         className="input input-bordered bg-base-300 flex-1"
         value={value}
@@ -32,6 +34,7 @@ export function MessageInput({
         onKeyDown={handleKeyDown}
         disabled={disabled}
         placeholder={placeholder}
+        aria-label={placeholder ?? "消息内容"}
       />
       <Button onClick={onSend} disabled={disabled || !value.trim()}>
         发送

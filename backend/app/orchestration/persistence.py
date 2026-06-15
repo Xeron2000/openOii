@@ -75,6 +75,8 @@ async def ensure_postgres_checkpointer_setup(database_url: str) -> None:
         if _checkpointer_setup_states.get(conn_str):
             return
 
+        import logging
+        logging.error(f'ensure_postgres_checkpointer_setup: connecting to {conn_str}')
         conn = await asyncpg.connect(conn_str)
         try:
             for statement in _BOOTSTRAP_STATEMENTS:

@@ -25,7 +25,7 @@ class ImageServiceProtocol(Protocol):
 
 def create_image_service(settings: Settings) -> ImageServiceProtocol:
     provider = settings.image_provider.lower()
-    if provider == "openai":
+    if provider in {"openai", "modelscope"}:
         from app.services.image import ImageService
 
         return ImageService(settings)

@@ -37,23 +37,27 @@ vi.mock("~/stores/settingsStore", () => ({
 }));
 
 describe("TopBar", () => {
-	it("constrains the project dropdown and labels icon buttons on mobile", () => {
+	it("constrains the project dropdown and keeps project chrome app-level by default", () => {
 		const { container } = render(
-			<TopBar
-				projectId={16}
-				onToggleAssets={vi.fn()}
-				onToggleHistory={vi.fn()}
-			/>,
+			<TopBar projectId={16} />,
 		);
 
-		expect(container.querySelector("header")).toHaveClass("px-2", "gap-2");
+		expect(container.querySelector("header")).toHaveClass("px-3", "gap-2");
 		expect(container.querySelector('button[aria-haspopup="true"]')).toHaveClass(
-			"max-w-[120px]",
-			"sm:max-w-[180px]",
+			"max-w-[132px]",
+			"sm:max-w-[220px]",
 		);
-		expect(screen.getByRole("button", { name: "资产库" })).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "对话历史" })).toBeInTheDocument();
-		expect(screen.getByRole("button", { name: "切换暗色" })).toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "资产库" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "对话历史" })).not.toBeInTheDocument();
+		expect(screen.getByRole("button", { name: "主题，切换暗色" })).toBeInTheDocument();
 		expect(screen.getByRole("button", { name: "设置" })).toBeInTheDocument();
+	});
+
+	it("keeps app-level controls only on the home chrome", () => {
+		render(<TopBar />);
+
+		expect(screen.queryByRole("button", { name: "资产库" })).not.toBeInTheDocument();
+		expect(screen.queryByRole("button", { name: "对话历史" })).not.toBeInTheDocument();
+		expect(screen.getByRole("link", { name: "openOii" })).toBeInTheDocument();
 	});
 });

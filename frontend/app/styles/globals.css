@@ -27,13 +27,19 @@
     outline: none;
   }
 
-  [data-theme], .btn, .card-doodle, .card-comic, .btn-doodle, .btn-comic, .input-doodle, a, nav, header, aside {
-    transition-property: background-color, border-color, color, fill, stroke;
-    transition-duration: 200ms;
-    transition-timing-function: ease-in-out;
-  }
-
-  * {
+  [data-theme],
+  .btn,
+  .card-doodle,
+  .card-comic,
+  .btn-doodle,
+  .btn-comic,
+  .input-doodle,
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  summary {
     transition-property: background-color, border-color, color, fill, stroke;
     transition-duration: 200ms;
     transition-timing-function: ease-in-out;
@@ -41,7 +47,7 @@
 
   *[class*="animate-"],
   *[class*="transition-"] {
-    transition-property: none;
+    transition-property: revert-layer;
   }
 
   h1, h2, h3, h4, h5, h6 {

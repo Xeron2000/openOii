@@ -164,6 +164,7 @@ async def init_db() -> None:
 
         config_service = ConfigService(session)
         await config_service.ensure_initialized()
+        await config_service.ensure_provider_configs_initialized()
         await config_service.apply_settings_overrides()
 
         await ensure_builtin_templates(session)
@@ -187,6 +188,7 @@ async def init_db() -> None:
         )
         await session.commit()
 
+    log.error(f"init_db: settings.database_url = {settings.database_url}")
     await ensure_postgres_checkpointer_setup(settings.database_url)
 
 

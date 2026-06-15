@@ -1,19 +1,59 @@
 from __future__ import annotations
 
+import base64
+import io
 import json
 import logging
+import mimetypes
 import re
 from typing import Any
 
+from PIL import Image
 from sqlalchemy import select
 
 from app.agents.base import AgentContext, BaseAgent
 from app.agents.prompts.critic import CHARACTER_REVIEW_SYSTEM_PROMPT, SHOT_REVIEW_SYSTEM_PROMPT
 from app.config import Settings
 from app.models.project import Character, Shot
+from app.services.file_cleaner import get_local_path
 from app.services.text_factory import create_text_service
 
 logger = logging.getLogger(__name__)
+
+MAX_SOURCE_IMAGE_BYTES = 20 * 1024 * 1024
+MAX_INLINE_IMAGE_BYTES = 600 * 1024
+REVIEW_IMAGE_VARIANTS = ((768, 82), (640, 78), (512, 74))
+
+
+def _regeneration_reasons(result: dict[str, Any], threshold: float) -> list[str]:
+    reasons: list[str] = []
+    score = float(result.get("score", 0.0))
+    if score < threshold:
+        reasons.append(f"总分 {score:.1f} 低于阈值 {threshold:g}")
+
+    dimensions = result.get("dimensions", {})
+    if isinstance(dimensions, dict):
+        labels = {
+            "consistency": "一致性",
+            "quality": "质量",
+            "composition": "构图",
+        }
+        for key, label in labels.items():
+            value = dimensions.get(key)
+            if value is None:
+                continue
+            try:
+                dim_score = float(value)
+            except (TypeError, ValueError):
+                continue
+            if dim_score < threshold:
+                reasons.append(f"{label} {dim_score:g} 低于阈值 {threshold:g}")
+
+    return reasons
+
+
+def _should_regenerate_review(result: dict[str, Any], settings: Settings) -> bool:
+    return bool(_regeneration_reasons(result, settings.critique_score_threshold))
 
 
 class CriticAgent(BaseAgent):
@@ -31,19 +71,16 @@ class CriticAgent(BaseAgent):
     ) -> list[dict[str, Any]]:
         """Build a multimodal user message for VLM review.
 
-        If the image URL can be resolved to a public URL, send as image_url content block.
-        Otherwise, fall back to text-only review.
+        Local /static images are inlined as data URLs so local desktop/dev runs can
+        still feed real image pixels to OpenAI-compatible vision models.
         """
         content_parts: list[dict[str, Any]] = [
             {"type": "text", "text": text_prompt},
         ]
 
         if image_url:
-            # Resolve local paths to public URLs if configured
-            resolved_url = settings.build_public_url(image_url)
-            if resolved_url and (
-                resolved_url.startswith("http://") or resolved_url.startswith("https://")
-            ):
+            resolved_url = self._resolve_review_image_url(image_url, settings)
+            if resolved_url:
                 content_parts.append(
                     {
                         "type": "image_url",
@@ -51,7 +88,6 @@ class CriticAgent(BaseAgent):
                     }
                 )
             else:
-                # No public URL available — graceful degradation
                 content_parts.append(
                     {
                         "type": "text",
@@ -60,6 +96,92 @@ class CriticAgent(BaseAgent):
                 )
 
         return [{"role": "user", "content": content_parts}]
+
+    def _resolve_review_image_url(
+        self,
+        image_url: str,
+        settings: Settings,
+    ) -> str | None:
+        if image_url.startswith("data:image/"):
+            return image_url
+
+        inline_url = self._inline_local_image(image_url)
+        if inline_url:
+            return inline_url
+
+        resolved_url = settings.build_public_url(image_url)
+        if resolved_url and resolved_url != image_url:
+            inline_url = self._inline_local_image(resolved_url)
+            if inline_url:
+                return inline_url
+
+        if resolved_url and resolved_url.startswith(("http://", "https://")):
+            return resolved_url
+
+        return None
+
+    def _inline_local_image(self, image_url: str) -> str | None:
+        local_path = get_local_path(image_url)
+        if not local_path or not local_path.exists() or not local_path.is_file():
+            return None
+
+        file_size = local_path.stat().st_size
+        if file_size > MAX_SOURCE_IMAGE_BYTES:
+            logger.warning(
+                "CriticAgent: local image too large to inline: %s (%s bytes)",
+                local_path,
+                file_size,
+            )
+            return None
+
+        mime = mimetypes.guess_type(local_path.name)[0] or "image/png"
+        if not mime.startswith("image/"):
+            logger.warning("CriticAgent: unsupported local image mime %s for %s", mime, local_path)
+            return None
+
+        image_bytes = local_path.read_bytes()
+        if len(image_bytes) > MAX_INLINE_IMAGE_BYTES:
+            compressed = self._compress_review_image(local_path)
+            if compressed:
+                mime, image_bytes = compressed
+            else:
+                logger.warning(
+                    "CriticAgent: local image too large and compression failed: %s (%s bytes)",
+                    local_path,
+                    len(image_bytes),
+                )
+                return None
+
+        data = base64.b64encode(image_bytes).decode("ascii")
+        logger.debug("CriticAgent: inlined local image for review: %s", local_path)
+        return f"data:{mime};base64,{data}"
+
+    def _compress_review_image(self, local_path) -> tuple[str, bytes] | None:
+        try:
+            with Image.open(local_path) as original:
+                image = original.copy()
+        except Exception as exc:
+            logger.warning("CriticAgent: failed to open local review image %s: %s", local_path, exc)
+            return None
+
+        for max_side, quality in REVIEW_IMAGE_VARIANTS:
+            candidate = image.copy()
+            candidate.thumbnail((max_side, max_side), Image.Resampling.LANCZOS)
+            if candidate.mode in {"RGBA", "LA"}:
+                background = Image.new("RGB", candidate.size, (250, 250, 245))
+                alpha = candidate.getchannel("A")
+                background.paste(candidate.convert("RGBA"), mask=alpha)
+                candidate = background
+            elif candidate.mode != "RGB":
+                candidate = candidate.convert("RGB")
+
+            output = io.BytesIO()
+            candidate.save(output, format="JPEG", quality=quality, optimize=True)
+            data = output.getvalue()
+            if len(data) <= MAX_INLINE_IMAGE_BYTES:
+                return "image/jpeg", data
+
+        return None
 
     def _parse_review_response(self, raw_text: str) -> dict[str, Any]:
         """Parse structured JSON from the VLM response.
@@ -194,8 +316,10 @@ class CriticAgent(BaseAgent):
         result["entity_id"] = entity_id
 
         threshold = settings.critique_score_threshold
-        will_regenerate = result["score"] < threshold
+        regeneration_reasons = _regeneration_reasons(result, threshold)
+        will_regenerate = bool(regeneration_reasons)
         result["will_regenerate"] = will_regenerate
+        result["regeneration_reasons"] = regeneration_reasons
 
         # Send critique result via WebSocket
         await ctx.ws.send_event(
@@ -218,7 +342,7 @@ class CriticAgent(BaseAgent):
             f"  建议: {sug_str}"
         )
         if will_regenerate:
-            content += f"\n分数低于阈值 ({threshold})，将重新生成"
+            content += "\n" + "；".join(regeneration_reasons) + "，将重新生成"
         else:
             content += "\n质量达标，继续下一步"
 

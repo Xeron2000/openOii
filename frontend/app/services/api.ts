@@ -9,6 +9,8 @@ import type {
 	RollbackRequest,
 	RollbackResponse,
 	Shot,
+	ShotReorderItem,
+	ShotReorderResponse,
 	ShotUpdatePayload,
 	StoryOutline,
 	StoryOutlineUpdatePayload,
@@ -229,6 +231,12 @@ export const projectsApi = {
 		fetchApi<Character[]>(`/api/v1/projects/${id}/characters`),
 
 	getShots: (id: number) => fetchApi<Shot[]>(`/api/v1/projects/${id}/shots`),
+
+	reorderShots: (id: number, items: ShotReorderItem[]) =>
+		fetchApi<ShotReorderResponse>(`/api/v1/projects/${id}/shots/reorder`, {
+			method: "PATCH",
+			body: JSON.stringify({ items }),
+		}),
 
 	getOutline: (id: number) =>
 		fetchApi<StoryOutline | null>(`/api/v1/projects/${id}/outline`),
@@ -537,11 +545,6 @@ export const styleTemplatesApi = {
 
 // Export API
 export const exportApi = {
-	triggerPdf: (projectId: number) =>
-		fetchApi<ExportResponse>(`/api/v1/projects/${projectId}/export/pdf`, {
-			method: "POST",
-		}),
-
 	triggerWebtoon: (projectId: number) =>
 		fetchApi<ExportResponse>(`/api/v1/projects/${projectId}/export/webtoon`, {
 			method: "POST",

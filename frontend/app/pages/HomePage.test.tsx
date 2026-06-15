@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +9,25 @@ let mockIsPending = false;
 
 vi.mock("~/services/api", () => ({
   projectsApi: { create: vi.fn() },
+  universesApi: {
+    list: vi.fn(() =>
+      Promise.resolve([
+        {
+          id: 12,
+          name: "测试宇宙",
+          description: null,
+          world_setting: null,
+          style_rules: null,
+          cover_image_url: null,
+          is_active: true,
+          created_at: "2026-01-01T00:00:00Z",
+          updated_at: "2026-01-01T00:00:00Z",
+          projects_count: 2,
+          shared_characters_count: 1,
+        },
+      ]),
+    ),
+  },
 }));
 
 vi.mock("@tanstack/react-query", async (importOriginal) => {
@@ -58,9 +77,27 @@ describe("HomePage", () => {
     renderHomePage();
     const textarea = screen.getByLabelText("输入你的故事创意");
     fireEvent.change(textarea, { target: { value: "My story" } });
-    fireEvent.click(screen.getByLabelText("开始生成故事"));
+    fireEvent.click(screen.getByRole("button", { name: "生成并进入画布" }));
     expect(mockMutate).toHaveBeenCalledWith(
       expect.objectContaining({ story: "My story" })
+    );
+  });
+
+  it("submits selected universe as a new chapter", async () => {
+    renderHomePage();
+    await screen.findByRole("option", { name: /测试宇宙/ });
+    const universeSelect = screen.getByLabelText("选择 IP 宇宙");
+    fireEvent.change(universeSelect, { target: { value: "12" } });
+    await waitFor(() => expect(universeSelect).toHaveValue("12"));
+    const textarea = screen.getByLabelText("输入你的故事创意");
+    fireEvent.change(textarea, { target: { value: "月台信号灯异常" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成并进入画布" }));
+    expect(mockMutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        universe_id: 12,
+        chapter_number: 3,
+        chapter_title: "月台信号灯异常",
+      }),
     );
   });
 
@@ -82,7 +119,7 @@ describe("HomePage", () => {
 
   it("disables button when empty", () => {
     renderHomePage();
-    expect(screen.getByLabelText("开始生成故事")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "生成并进入画布" })).toBeDisabled();
   });
 
   it("shows remaining char count near limit", () => {

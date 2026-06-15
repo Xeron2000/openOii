@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from app.models.universe import Universe
+from app.models.universe import SharedCharacter, Universe
 
 pytestmark = pytest.mark.asyncio
 
@@ -56,3 +56,26 @@ async def test_update_universe_can_clear_nullable_fields(async_client, test_sess
     assert data["world_setting"] is None
     assert data["style_rules"] is None
     assert data["cover_image_url"] is None
+
+
+async def test_shared_character_response_preserves_has_embedding(async_client, test_session):
+    universe = Universe(name="Embedding World")
+    test_session.add(universe)
+    await test_session.commit()
+    await test_session.refresh(universe)
+
+    shared_character = SharedCharacter(
+        universe_id=universe.id,
+        name="Embedded Character",
+        face_embedding="[0.1, 0.2, 0.3]",
+    )
+    test_session.add(shared_character)
+    await test_session.commit()
+
+    list_res = await async_client.get(f"/api/v1/universes/{universe.id}/shared-characters")
+    assert list_res.status_code == 200
+    assert list_res.json()[0]["has_embedding"] is True
+
+    detail_res = await async_client.get(f"/api/v1/universes/{universe.id}")
+    assert detail_res.status_code == 200
+    assert detail_res.json()["shared_characters"][0]["has_embedding"] is True

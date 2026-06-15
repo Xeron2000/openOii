@@ -23,19 +23,19 @@ export function UniverseCard({ universe }: UniverseCardProps) {
 				)}
 
 				{/* Name */}
-				<h3 className="text-lg font-heading font-bold underline-sketch mb-1">
+				<h2 className="text-lg font-heading font-bold underline-sketch mb-1">
 					{universe.name}
-				</h3>
+				</h2>
 
 				{/* Description */}
 				{universe.description && (
-					<p className="text-sm text-base-content/60 line-clamp-2 mb-3">
+					<p className="text-sm text-base-content/75 line-clamp-2 mb-3">
 						{universe.description}
 					</p>
 				)}
 
 				{/* Stats */}
-				<div className="flex items-center gap-4 text-xs text-base-content/40">
+				<div className="flex items-center gap-4 text-xs text-base-content/70">
 					<span className="inline-flex items-center gap-1">
 						<SparklesIcon className="w-3.5 h-3.5" />
 						{universe.projects_count} 章节

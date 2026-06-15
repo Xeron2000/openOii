@@ -62,6 +62,55 @@ class VideoService:
         #   GET  /api/v1/videos/{id}
         return f"{base}{endpoint}/{quote(task_id, safe='')}"
 
+    def _build_standard_payload(
+        self,
+        *,
+        prompt: str,
+        duration: float,
+        image_base64: str | None = None,
+        kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build a non-chat video payload with model-specific parameters."""
+        extra = dict(kwargs or {})
+        model_lower = self.settings.video_model.lower()
+        endpoint_lower = self.settings.video_endpoint.lower()
+
+        if "ltx" in model_lower or endpoint_lower.endswith("/ltx-video"):
+            payload: dict[str, Any] = {
+                "client_task_id": extra.pop("client_task_id", f"ltx-video-{uuid4().hex}"),
+                "prompt": prompt,
+                "duration": int(duration),
+                "aspect_ratio": extra.pop("aspect_ratio", "16:9"),
+                **extra,
+            }
+        elif "grok" in model_lower:
+            payload = {
+                "model": self.settings.video_model,
+                "prompt": prompt,
+                "seconds": str(int(duration)),
+                "size": extra.pop("size", "16:9"),
+                **extra,
+            }
+        elif "veo" in model_lower:
+            payload = {
+                "model": self.settings.video_model,
+                "prompt": prompt,
+                "duration": int(duration),
+                "aspect_ratio": extra.pop("aspect_ratio", "16:9"),
+                **extra,
+            }
+        else:
+            payload = {
+                "model": self.settings.video_model,
+                "prompt": prompt,
+                "duration": duration,
+                **extra,
+            }
+
+        if image_base64:
+            payload["image"] = image_base64
+        return payload
+
     @staticmethod
     def _dirty_contains_url(val: str | None) -> bool:
         """快速判断字符串中是否包含 http(s) URL（含前导空格、括号等噪声）。"""
@@ -296,44 +345,11 @@ class VideoService:
                 **kwargs,
             }
         else:
-            # 根据模型类型使用不同参数格式
-            model_lower = self.settings.video_model.lower()
-            endpoint_lower = self.settings.video_endpoint.lower()
-            if "ltx" in model_lower or endpoint_lower.endswith("/ltx-video"):
-                payload = {
-                    "client_task_id": kwargs.pop(
-                        "client_task_id", f"ltx-video-{uuid4().hex}"
-                    ),
-                    "prompt": prompt,
-                    "duration": int(duration),
-                    "aspect_ratio": kwargs.pop("aspect_ratio", "16:9"),
-                    **kwargs,
-                }
-            elif "grok" in model_lower:
-                # grok-videos 使用 seconds 和 size 参数
-                payload: dict[str, Any] = {
-                    "model": self.settings.video_model,
-                    "prompt": prompt,
-                    "seconds": int(duration),
-                    "size": "16:9",
-                    **kwargs,
-                }
-            elif "veo" in model_lower:
-                # veo3 使用 duration (integer) 和 aspect_ratio 参数
-                payload: dict[str, Any] = {
-                    "model": self.settings.video_model,
-                    "prompt": prompt,
-                    "duration": int(duration),
-                    "aspect_ratio": "16:9",
-                    **kwargs,
-                }
-            else:
-                payload = {
-                    "model": self.settings.video_model,
-                    "prompt": prompt,
-                    "duration": duration,
-                    **kwargs,
-                }
+            payload = self._build_standard_payload(
+                prompt=prompt,
+                duration=duration,
+                kwargs=kwargs,
+            )
 
         return await self._post_json_with_retry(url, payload)
 
@@ -384,12 +400,13 @@ class VideoService:
                 raise RuntimeError(f"Video API stream response missing URL: {content}")
             else:
                 # 标准视频生成接口（图生视频）
-                payload: dict[str, Any] = {
-                    "model": self.settings.video_model,
-                    "prompt": prompt,
-                    "image": image_base64,
-                    **kwargs,
-                }
+                duration = float(kwargs.pop("duration", 5.0))
+                payload = self._build_standard_payload(
+                    prompt=prompt,
+                    duration=duration,
+                    image_base64=image_base64,
+                    kwargs=kwargs,
+                )
                 data = await self._post_json_with_retry(url, payload)
 
                 # 异步任务：提交后需轮询

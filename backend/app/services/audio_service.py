@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -266,9 +267,18 @@ class AudioService:
         # 解析本地文件路径
         video_local = get_local_path(video_path)
         if video_local is None:
-            # 不是本地文件，无法混流
-            logger.warning("Cannot mix audio: video is not a local file (%s)", video_path)
-            return video_path
+            temp_dir = tempfile.TemporaryDirectory()
+            video_local = Path(temp_dir.name) / "source.mp4"
+            try:
+                from app.services.video_merger import get_video_merger_service
+
+                await get_video_merger_service().download_video(video_path, video_local)
+            except Exception:
+                temp_dir.cleanup()
+                logger.warning("Cannot mix audio: failed to localize video (%s)", video_path, exc_info=True)
+                return video_path
+        else:
+            temp_dir = None
 
         # 构建输出文件
         output_filename = f"audio_{uuid.uuid4().hex[:8]}.mp4"
@@ -288,6 +298,8 @@ class AudioService:
             bgm_local = None
 
         if not tts_local and not bgm_local:
+            if temp_dir is not None:
+                temp_dir.cleanup()
             return video_path
 
         actual_bgm_vol = bgm_volume if bgm_volume is not None else self.settings.bgm_volume
@@ -302,6 +314,9 @@ class AudioService:
         except Exception:
             logger.warning("FFmpeg audio mixing failed, keeping original video", exc_info=True)
             return video_path
+        finally:
+            if temp_dir is not None:
+                temp_dir.cleanup()
 
     async def _ffmpeg_mix(
         self,
@@ -386,7 +401,7 @@ class AudioService:
             "-y",
             *inputs,
             "-filter_complex", filter_chain,
-            "-map", "0:v",       # 视频流
+            "-map", "0:v:0",     # 只取主视频流，避免封面/附图流触发 -shortest 截断
             "-map", "[aout]",    # 混合音频
             "-c:v", "copy",      # 视频流直接复制
             "-c:a", "aac",

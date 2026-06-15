@@ -1,13 +1,20 @@
 import { ArrowPathIcon, StopIcon } from "@heroicons/react/24/outline";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import {
 	Link,
-	useNavigate,
 	useParams,
 	useSearchParams,
 } from "react-router-dom";
-import { ChatDrawer } from "~/components/chat/ChatDrawer";
 import { TopBar } from "~/components/layout/TopBar";
 import { StagePipeline } from "~/components/layout/StagePipeline";
 import { StageView } from "~/components/layout/StageView";
@@ -15,8 +22,16 @@ import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import { useProjectWebSocket } from "~/hooks/useWebSocket";
 import { canvasEvents } from "~/components/canvas/canvasEvents";
+import { buildComicWorkflow } from "~/features/comic-workflow/graph/buildComicWorkflow";
+import {
+	WorkspaceSidebar,
+	type WorkspaceSidebarTab,
+} from "~/features/comic-workflow/sidebar/WorkspaceSidebar";
+import {
+	deriveWorkbenchStatus,
+	type LastRunTerminalStatus,
+} from "~/features/comic-workflow/state/deriveWorkbenchStatus";
 import { projectsApi } from "~/services/api";
-import { useChatPanelStore } from "~/stores/chatPanelStore";
 import { useEditorStore, useShallow } from "~/stores/editorStore";
 import type {
 	ProjectProviderSettings,
@@ -28,16 +43,6 @@ import { ApiError } from "~/types/errors";
 import { toast } from "~/utils/toast";
 import { isWorkflowStage } from "~/utils/workflowStage";
 
-const AssetDrawer = lazy(() =>
-	import("~/components/panels/AssetDrawer").then((m) => ({
-		default: m.AssetDrawer,
-	})),
-);
-const HistoryDrawer = lazy(() =>
-	import("~/components/panels/HistoryDrawer").then((m) => ({
-		default: m.HistoryDrawer,
-	})),
-);
 const VersionCompareDrawer = lazy(() =>
 	import("~/components/panels/VersionCompareDrawer").then((m) => ({
 		default: m.VersionCompareDrawer,
@@ -54,7 +59,6 @@ function feedbackTypeForStage(stage: WorkflowStage): FeedbackType {
 
 export function ProjectPage() {
 	const { id } = useParams<{ id: string }>();
-	const navigate = useNavigate();
 	const [searchParams, setSearchParams] = useSearchParams();
 	const projectId = parseInt(id || "0", 10);
 	const queryClient = useQueryClient();
@@ -62,21 +66,44 @@ export function ProjectPage() {
 		isGenerating: storeIsGenerating,
 		currentRunId: storeCurrentRunId,
 		currentStage: storeCurrentStage,
+		progress: storeProgress,
 		awaitingConfirm: storeAwaitingConfirm,
 		recoveryControl: storeRecoveryControl,
+		runMode: storeRunMode,
+		characters: storeCharacters,
+		shots: storeShots,
+		blockingClips: storeBlockingClips,
+		projectTitle: storeProjectTitle,
+		projectStory: storeProjectStory,
+		projectSummary: storeProjectSummary,
+		projectVideoUrl: storeProjectVideoUrl,
+		projectStatus: storeProjectStatus,
 	} = useEditorStore(
 		useShallow((s) => ({
 			isGenerating: s.isGenerating,
 			currentRunId: s.currentRunId,
 			currentStage: s.currentStage,
+			progress: s.progress,
 			awaitingConfirm: s.awaitingConfirm,
 			recoveryControl: s.recoveryControl,
+			runMode: s.runMode,
+			characters: s.characters,
+			shots: s.shots,
+			blockingClips: s.blockingClips,
+			projectTitle: s.projectTitle,
+			projectStory: s.projectStory,
+			projectSummary: s.projectSummary,
+			projectVideoUrl: s.projectVideoUrl,
+			projectStatus: s.projectStatus,
 		})),
 	);
 	const hasActiveRun = storeIsGenerating || Boolean(storeCurrentRunId);
 	const hasRecovery = Boolean(storeRecoveryControl);
-	const [assetsOpen, setAssetsOpen] = useState(false);
-	const [historyOpen, setHistoryOpen] = useState(false);
+	const [sidebarTab, setSidebarTab] = useState<WorkspaceSidebarTab>("chat");
+	const [workspaceCollapsed, setWorkspaceCollapsed] = useState(true);
+	const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+	const [lastRunStatus, setLastRunStatus] =
+		useState<LastRunTerminalStatus>(null);
 	const [versionOpen, setVersionOpen] = useState(false);
 	const [versionTarget, setVersionTarget] = useState<{
 		entityType: VersionEntityType;
@@ -113,6 +140,7 @@ export function ProjectPage() {
 		s.setRecoveryControl(null);
 		s.setRecoverySummary(null);
 		s.setRecoveryGate(null);
+		setLastRunStatus(null);
 	};
 
 	const {
@@ -240,6 +268,9 @@ export function ProjectPage() {
 		editorStore.setProjectVisualBible(null);
 		editorStore.setProjectOutlineApproved(false);
 		editorStore.setBlockingClips(null);
+		setLastRunStatus(null);
+		setSelectedNodeId(null);
+		setSidebarTab("chat");
 	}, [projectId]);
 
 	useEffect(() => {
@@ -345,6 +376,11 @@ export function ProjectPage() {
 
 	const cancelMutation = useMutation({
 		mutationFn: () => projectsApi.cancel(projectId),
+		onSuccess: (result) => {
+			if (result?.status === "cancelled") {
+				setLastRunStatus("cancelled");
+			}
+		},
 		onSettled: () => {
 			useEditorStore.getState().resetRunState();
 			useEditorStore.getState().addMessage({
@@ -384,6 +420,7 @@ export function ProjectPage() {
 			s.setRecoveryControl(null);
 			s.setRecoverySummary(null);
 			s.setRecoveryGate(null);
+			setLastRunStatus(null);
 		},
 		onError: (error: Error | ApiError) => {
 			const apiError = error instanceof ApiError ? error : null;
@@ -399,12 +436,14 @@ export function ProjectPage() {
 		if (generateMutation.isPending || hasActiveRun) return;
 		const requestToken = generateRequestTokenRef.current + 1;
 		generateRequestTokenRef.current = requestToken;
+		setLastRunStatus(null);
 		useEditorStore.getState().clearMessages();
 		useEditorStore.getState().setCurrentStage("plan");
 		generateMutation.mutate({ requestToken });
 	};
 
 	const handleFeedback = (content: string) => {
+		setLastRunStatus(null);
 		feedbackMutation.mutate(content);
 		useEditorStore.getState().addMessage({
 			agent: "user",
@@ -467,6 +506,13 @@ export function ProjectPage() {
 	}, [projectUpdatedAt, projectId, queryClient]);
 
 	useEffect(() => {
+		if (storeAwaitingConfirm && storeRunMode === "manual") {
+			setSidebarTab("chat");
+			setWorkspaceCollapsed(false);
+		}
+	}, [storeAwaitingConfirm, storeRunMode]);
+
+	useEffect(() => {
 		const autoStart = searchParams.get("autoStart");
 		if (
 			autoStart === "true" &&
@@ -479,15 +525,81 @@ export function ProjectPage() {
 			setSearchParams({}, { replace: true });
 			const requestToken = generateRequestTokenRef.current + 1;
 			generateRequestTokenRef.current = requestToken;
+			setLastRunStatus(null);
 			editorStore.clearMessages();
 			editorStore.setCurrentStage("plan");
 			generateMutation.mutate({ requestToken });
 		}
 	}, [project, searchParams, setSearchParams, generateMutation]);
 
+	const selectedWorkflowNode = useMemo(() => {
+		if (!project || !selectedNodeId) return null;
+		const graph = buildComicWorkflow({
+			project: {
+				...project,
+				title: storeProjectTitle ?? project.title,
+				story: storeProjectStory ?? project.story,
+				summary: storeProjectSummary ?? project.summary,
+				video_url: storeProjectVideoUrl ?? project.video_url,
+				status: storeProjectStatus ?? project.status,
+			},
+			characters: storeCharacters,
+			shots: storeShots,
+			blockingClips: storeBlockingClips,
+			isGenerating: storeIsGenerating,
+		});
+		return graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
+	}, [
+		project,
+		selectedNodeId,
+		storeCharacters,
+		storeShots,
+		storeBlockingClips,
+		storeIsGenerating,
+		storeProjectTitle,
+		storeProjectStory,
+		storeProjectSummary,
+		storeProjectVideoUrl,
+		storeProjectStatus,
+	]);
+
+	const handleSelectedNodeIdChange = useCallback((nodeId: string | null) => {
+		setSelectedNodeId(nodeId);
+		if (nodeId) {
+			setSidebarTab("inspector");
+			setWorkspaceCollapsed(false);
+		}
+	}, []);
+
 	const workspaceLoading =
 		projectLoading ||
 		Boolean(project && (charactersLoading || shotsLoading || messagesLoading));
+
+	const workbenchStatus = useMemo(
+		() =>
+			deriveWorkbenchStatus({
+				isGenerating: storeIsGenerating,
+				currentRunId: storeCurrentRunId,
+				awaitingConfirm: storeAwaitingConfirm,
+				recoveryControl: storeRecoveryControl,
+				projectStatus: storeProjectStatus ?? project?.status,
+				projectVideoUrl: storeProjectVideoUrl ?? project?.video_url,
+				blockingClips: storeBlockingClips,
+				lastRunStatus,
+			}),
+		[
+			storeIsGenerating,
+			storeCurrentRunId,
+			storeAwaitingConfirm,
+			storeRecoveryControl,
+			storeProjectStatus,
+			project?.status,
+			storeProjectVideoUrl,
+			project?.video_url,
+			storeBlockingClips,
+			lastRunStatus,
+		],
+	);
 
 	if (workspaceLoading) {
 		return (
@@ -515,57 +627,50 @@ export function ProjectPage() {
 
 	return (
 		<div className="h-screen flex flex-col bg-base-100 font-sans overflow-hidden">
-			<TopBar
-				onToggleAssets={() => setAssetsOpen((v) => !v)}
-				onToggleHistory={() => setHistoryOpen((v) => !v)}
-				assetsOpen={assetsOpen}
-				historyOpen={historyOpen}
-				projectId={projectId}
-			/>
+			<TopBar projectId={projectId} />
 			<StagePipeline
 				currentStage={storeCurrentStage}
-				isGenerating={storeIsGenerating}
+				isGenerating={hasActiveRun}
+				progress={storeProgress}
+				workbenchStatus={workbenchStatus}
 				awaitingConfirm={storeAwaitingConfirm}
 				hasRecovery={hasRecovery}
+				onGenerate={handleGenerate}
 				onResume={handleResume}
 				onCancel={handleCancel}
-				onToggleChat={() => useChatPanelStore.getState().open()}
+				onToggleChat={() => {
+					setSidebarTab("chat");
+					setWorkspaceCollapsed(false);
+				}}
+				generateDisabled={generateMutation.isPending || hasActiveRun}
 			/>
 
-			<div className="flex-1 flex overflow-hidden">
+			<main
+				className="relative flex flex-1 overflow-hidden"
+				aria-label="漫剧工作台"
+			>
 				<div className="flex-1 relative overflow-hidden">
-					<StageView projectId={projectId} />
+					<StageView
+						projectId={projectId}
+						onSelectedNodeIdChange={handleSelectedNodeIdChange}
+					/>
 				</div>
 
-				<ChatDrawer
+				<WorkspaceSidebar
+					activeTab={sidebarTab}
+					onTabChange={setSidebarTab}
+					projectId={projectId}
+					selectedNode={selectedWorkflowNode}
+					structureLocked={hasActiveRun || storeAwaitingConfirm}
 					onSendFeedback={handleFeedback}
 					onConfirm={handleConfirm}
-					onGenerate={handleGenerate}
 					onCancel={handleCancel}
 					isGenerating={hasActiveRun}
-					generateDisabled={false}
-					generateDisabledReason={undefined}
+					collapsed={workspaceCollapsed}
+					onCollapsedChange={setWorkspaceCollapsed}
 				/>
-			</div>
+			</main>
 
-			{assetsOpen && (
-				<Suspense fallback={null}>
-					<AssetDrawer
-						open
-						onClose={() => setAssetsOpen(false)}
-						projectId={project.id}
-					/>
-				</Suspense>
-			)}
-			{historyOpen && (
-				<Suspense fallback={null}>
-					<HistoryDrawer
-						open
-						onClose={() => setHistoryOpen(false)}
-						onNavigate={(id) => navigate(`/project/${id}`)}
-					/>
-				</Suspense>
-			)}
 			{versionOpen && (
 				<Suspense fallback={null}>
 					<VersionCompareDrawer

@@ -154,6 +154,22 @@ def test_resolver_accepts_fake_text_and_image_without_credentials() -> None:
     assert result.video.valid is True
 
 
+def test_resolver_accepts_modelscope_image_with_image_api_key() -> None:
+    settings = Settings(
+        text_provider="fake",
+        image_provider="modelscope",
+        image_api_key="image-key",
+        video_provider="fake",
+    )
+
+    result = resolve_project_provider_settings(make_project(), settings)
+
+    assert result.valid is True
+    assert result.image.selected_key == "modelscope"
+    assert result.image.resolved_key == "modelscope"
+    assert result.image.valid is True
+
+
 def test_resolver_is_deterministic_for_same_inputs() -> None:
     settings = Settings(
         text_provider="openai",

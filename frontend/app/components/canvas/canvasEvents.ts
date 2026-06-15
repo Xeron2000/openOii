@@ -16,6 +16,7 @@ export interface ShapeActionPayload {
 export interface CanvasEvents {
   "preview-image": { src: string; alt: string };
   "preview-video": { src: string; title: string };
+  "select-workflow-node": { nodeId: string };
   "shape-action": ShapeActionPayload;
   "version-history": { entityType: "character" | "shot"; entityId: number };
 }

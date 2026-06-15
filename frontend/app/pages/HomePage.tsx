@@ -1,7 +1,7 @@
-import { lazy, Suspense, useState, useCallback, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { projectsApi } from "~/services/api";
+import { lazy, Suspense, useState, useCallback, useEffect, useRef } from "react";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { projectsApi, universesApi } from "~/services/api";
 import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import {
@@ -53,14 +53,32 @@ const STYLE_CATEGORIES = [
 	},
 ];
 
+const STYLE_OPTIONS = STYLE_CATEGORIES.flatMap((category) => category.styles);
+const PRIMARY_STYLE_VALUES = new Set([
+	"anime",
+	"cinematic",
+	"donghua",
+	"sketch",
+]);
+const PRIMARY_STYLE_OPTIONS = STYLE_OPTIONS.filter((option) =>
+	PRIMARY_STYLE_VALUES.has(option.value),
+);
 const DEFAULT_STYLE = "anime";
 
 export function HomePage() {
 	const navigate = useNavigate();
+	const [searchParams] = useSearchParams();
 	const queryClient = useQueryClient();
+	const requestedUniverseId = Number(searchParams.get("universeId"));
+	const requestedChapterNumber = Number(searchParams.get("chapterNumber"));
 	const [story, setStory] = useState("");
 	const [style, setStyle] = useState(DEFAULT_STYLE);
 	const [creationMode, setCreationMode] = useState<"review" | "quick">("review");
+	const [selectedUniverseId, setSelectedUniverseId] = useState<number | null>(
+		Number.isFinite(requestedUniverseId) && requestedUniverseId > 0
+			? requestedUniverseId
+			: null,
+	);
 	const [shotCount, setShotCount] = useState<number | undefined>(undefined);
 	const [characterHints, setCharacterHints] = useState<string[]>([""]);
 	const [showAdvanced, setShowAdvanced] = useState(false);
@@ -70,6 +88,33 @@ export function HomePage() {
 	const [assetsOpen, setAssetsOpen] = useState(false);
 	const [historyOpen, setHistoryOpen] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
+	useEffect(() => {
+		setSelectedUniverseId(
+			Number.isFinite(requestedUniverseId) && requestedUniverseId > 0
+				? requestedUniverseId
+				: null,
+		);
+	}, [requestedUniverseId]);
+
+	const { data: universes = [], isLoading: universesLoading } = useQuery({
+		queryKey: ["universes"],
+		queryFn: () => universesApi.list(),
+	});
+	const selectedUniverse =
+		selectedUniverseId != null
+			? universes.find((universe) => universe.id === selectedUniverseId)
+			: undefined;
+	const nextChapterNumber =
+		selectedUniverseId != null
+			? Number.isFinite(requestedChapterNumber) && requestedChapterNumber > 0
+				? requestedChapterNumber
+				: (selectedUniverse?.projects_count ?? 0) + 1
+			: null;
+	const selectedStyleLabel =
+		STYLE_OPTIONS.find((option) => option.value === style)?.label ?? style;
+	const creationModeLabel =
+		creationMode === "review" ? "精细审阅" : "快速生成";
+	const activeCharacterHints = characterHints.filter((hint) => hint.trim());
 
 	const createMutation = useMutation({
 		mutationFn: projectsApi.create,
@@ -109,6 +154,11 @@ export function HomePage() {
 				: firstLine;
 
 		const hints = characterHints.filter((h) => h.trim());
+		const chapterNumber = selectedUniverseId ? nextChapterNumber : null;
+		const chapterTitle =
+			selectedUniverseId && chapterNumber
+				? title || `第 ${chapterNumber} 章`
+				: null;
 
 		createMutation.mutate({
 			title: title || "未命名项目",
@@ -117,6 +167,9 @@ export function HomePage() {
 			target_shot_count: shotCount,
 			character_hints: hints.length > 0 ? hints : undefined,
 			creation_mode: creationMode,
+			universe_id: selectedUniverseId,
+			chapter_number: chapterNumber,
+			chapter_title: chapterTitle,
 			text_provider_override: null,
 			image_provider_override: null,
 			video_provider_override: null,
@@ -204,12 +257,7 @@ export function HomePage() {
 			onDrop={handleDrop}
 			onDragOver={(e) => e.preventDefault()}
 		>
-			<TopBar
-				onToggleAssets={() => setAssetsOpen((v) => !v)}
-				onToggleHistory={() => setHistoryOpen((v) => !v)}
-				assetsOpen={assetsOpen}
-				historyOpen={historyOpen}
-			/>
+			<TopBar />
 			{assetsOpen && (
 				<Suspense fallback={null}>
 					<AssetDrawer open onClose={() => setAssetsOpen(false)} />
@@ -224,261 +272,423 @@ export function HomePage() {
 					/>
 				</Suspense>
 			)}
-			<div className="flex flex-col items-center justify-center p-4 sm:p-6 halftone-bg-accent min-h-[calc(100vh-40px)]">
-				<main className="w-full max-w-2xl mx-auto">
-					<div className="text-center mb-8 animate-doodle-pop">
-						<h1 className="text-6xl sm:text-8xl font-comic tracking-wider text-primary leading-none">
-							openOii
-						</h1>
-						<p className="font-sketch text-sm text-base-content/40 mt-2 tracking-wide">
-							用 AI 将故事转化为漫剧视频
-						</p>
-						<Link
-							to="/universes"
-							className="inline-flex items-center gap-1 mt-2 text-xs text-primary/60 hover:text-primary transition-colors font-heading font-bold"
-						>
-							<GlobeAltIcon className="w-3.5 h-3.5" aria-hidden="true" />
-							IP 宇宙
-						</Link>
-					</div>
+			<div className="halftone-bg-accent min-h-[calc(100vh-56px)] px-4 py-6 sm:px-6 lg:py-10">
+				<main className="mx-auto flex w-full max-w-5xl flex-col gap-5">
+					<header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+						<div className="min-w-0">
+							<h1 className="m-0 pb-1 font-comic text-5xl leading-[1.05] tracking-wider text-primary sm:text-7xl">
+								openOii
+							</h1>
+							<p className="m-0 mt-2 max-w-2xl text-base font-semibold text-base-content/70">
+								把一个故事点子变成可审阅的漫剧分镜和视频。
+							</p>
+						</div>
+						<nav className="flex flex-wrap gap-2" aria-label="首页入口">
+							<button
+								type="button"
+								className={`touch-target inline-flex items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition-colors hover:bg-base-200 hover:text-primary ${
+									historyOpen ? "bg-primary text-primary-content" : "text-base-content/70"
+								}`}
+								onClick={() => setHistoryOpen((v) => !v)}
+								aria-pressed={historyOpen}
+							>
+								<SvgIcon name="clock-3" size={16} />
+								所有项目
+							</button>
+							<button
+								type="button"
+								className={`touch-target inline-flex items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold transition-colors hover:bg-base-200 hover:text-primary ${
+									assetsOpen ? "bg-primary text-primary-content" : "text-base-content/70"
+								}`}
+								onClick={() => setAssetsOpen((v) => !v)}
+								aria-pressed={assetsOpen}
+							>
+								<SvgIcon name="archive" size={16} />
+								资产库
+							</button>
+							<Link
+								to="/universes"
+								className="touch-target inline-flex items-center justify-center gap-2 rounded-lg px-3 text-sm font-bold text-base-content/70 transition-colors hover:bg-base-200 hover:text-primary"
+							>
+								<GlobeAltIcon className="h-4 w-4" aria-hidden="true" />
+								IP 宇宙
+							</Link>
+						</nav>
+					</header>
 
-					<Card className="w-full card-comic animate-draw-in">
-						<div className="space-y-4">
-							{/* Story Input + Reference Images */}
-							<div className="relative" onPaste={handlePaste}>
-								<label htmlFor="story-input" className="sr-only">
-									输入你的故事创意
-								</label>
-								<textarea
-									id="story-input"
-									className="input-doodle w-full min-h-28 text-sm resize-none p-3 pr-12 bg-base-100/80"
-									placeholder="写下你的故事创意…"
-									value={story}
-									onChange={(e) => setStory(e.target.value)}
-									onKeyDown={handleKeyDown}
-									onCompositionStart={() => setIsComposing(true)}
-									onCompositionEnd={() => setIsComposing(false)}
-									disabled={createMutation.isPending}
-									aria-label="输入你的故事创意"
-									maxLength={5000}
-									rows={4}
-								/>
-								{story.length > 4500 && (
-									<div className="absolute top-2 right-2 text-xs text-warning font-bold">
-										{5000 - story.length}
-									</div>
-								)}
-								<Button
-									variant="primary"
-									size="sm"
-									className="absolute right-2 bottom-2 rounded-full !p-2 min-w-[40px] min-h-[40px] transition-all duration-150 hover:scale-110 active:scale-90 shadow-comic border-3 border-primary-content/20"
-									onClick={handleSubmit}
-									disabled={!story.trim() || createMutation.isPending}
-									loading={createMutation.isPending}
-									aria-label="开始生成故事"
-								>
-									{!createMutation.isPending && (
-										<PaperAirplaneIcon className="w-4 h-4" aria-hidden="true" />
-									)}
-								</Button>
-							</div>
-
-							{/* Reference Images */}
-							{referenceImages.length > 0 && (
-								<div className="flex gap-1.5 flex-wrap">
-									{referenceImages.map((img, i) => (
-										<div
-											key={i}
-											className="relative group w-12 h-12 rounded-lg overflow-hidden border-2 border-base-content/10"
+					<Card className="card-comic animate-draw-in w-full overflow-hidden !p-0">
+						<div className="grid lg:grid-cols-[minmax(0,1fr)_18rem]">
+							<section className="min-w-0 p-4 sm:p-6 lg:p-7">
+								<div onPaste={handlePaste}>
+									<div className="mb-3 flex items-center justify-between gap-3">
+										<label
+											htmlFor="story-input"
+											className="font-heading text-lg font-bold"
 										>
-											<img
-												src={img}
-												alt={`参考图 ${i + 1}`}
-												className="w-full h-full object-cover"
-											/>
-											<button
-												type="button"
-												className="absolute inset-0 bg-error/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-												onClick={() => removeReferenceImage(i)}
-												aria-label={`删除参考图 ${i + 1}`}
-											>
-												<SvgIcon name="x" size={12} className="text-base-100" />
-											</button>
-										</div>
-									))}
-									{referenceImages.length < 7 && (
-										<button
-											type="button"
-											className="w-12 h-12 rounded-lg border-2 border-dashed border-base-content/15 flex items-center justify-center text-base-content/25 hover:border-primary/40 hover:text-primary/50 transition-colors"
-											onClick={() => fileInputRef.current?.click()}
-											aria-label="添加参考图"
-										>
-											<SvgIcon name="plus" size={14} />
-										</button>
-									)}
-								</div>
-							)}
-							{referenceImages.length === 0 && (
-								<div
-									className="flex items-center gap-1.5 text-xs text-base-content/30 hover:text-primary/50 cursor-pointer transition-colors"
-									onClick={() => fileInputRef.current?.click()}
-									role="button"
-									tabIndex={0}
-									onKeyDown={(e) =>
-										e.key === "Enter" && fileInputRef.current?.click()
-									}
-								>
-									<SvgIcon name="image" size={14} />
-									<span>添加参考图（可选，最多7张）</span>
-								</div>
-							)}
-							<input
-								ref={fileInputRef}
-								type="file"
-								accept="image/*"
-								multiple
-								className="hidden"
-								onChange={(e) => {
-									handleImageUpload(e.target.files);
-									e.target.value = "";
-								}}
-							/>
-
-							{/* Style Selector */}
-							<div className="space-y-1.5">
-								{STYLE_CATEGORIES.map((category, ci) => (
-									<div
-										key={category.group}
-										className="flex items-center gap-1.5 flex-wrap"
-									>
-										<span className="text-[10px] text-base-content/30 font-bold uppercase tracking-wider w-14 flex-shrink-0">
-											{category.group}
+											故事创意
+										</label>
+										<span className="font-mono text-xs text-base-content/70">
+											{story.length}/5000
 										</span>
-										<div className="flex gap-1 flex-wrap items-center">
-											{category.styles.map((opt) => (
+									</div>
+									<textarea
+										id="story-input"
+										className="input-doodle w-full min-h-40 resize-none bg-base-100/85 p-4 text-base leading-relaxed sm:min-h-52"
+										placeholder="主角、冲突、关键画面、情绪基调。"
+										value={story}
+										onChange={(e) => setStory(e.target.value)}
+										onKeyDown={handleKeyDown}
+										onCompositionStart={() => setIsComposing(true)}
+										onCompositionEnd={() => setIsComposing(false)}
+										disabled={createMutation.isPending}
+										aria-label="输入你的故事创意"
+										maxLength={5000}
+										rows={7}
+									/>
+									{story.length > 4500 && (
+										<p className="m-0 mt-2 text-xs font-bold text-warning">
+											还可输入 {5000 - story.length} 字
+										</p>
+									)}
+								</div>
+
+								<div className="mt-4 flex flex-col gap-3 border-t border-base-content/10 pt-4 sm:flex-row sm:items-center sm:justify-between">
+									<div className="flex min-w-0 flex-wrap gap-2 text-xs font-semibold text-base-content/75">
+										<span className="rounded-full border border-base-content/10 bg-base-200 px-3 py-1">
+											{selectedStyleLabel}
+										</span>
+										<span className="rounded-full border border-base-content/10 bg-base-200 px-3 py-1">
+											{creationModeLabel}
+										</span>
+										{referenceImages.length > 0 && (
+											<span className="rounded-full border border-base-content/10 bg-base-200 px-3 py-1">
+												参考图 {referenceImages.length}
+											</span>
+										)}
+										{activeCharacterHints.length > 0 && (
+											<span className="rounded-full border border-base-content/10 bg-base-200 px-3 py-1">
+												角色 {activeCharacterHints.length}
+											</span>
+										)}
+										{selectedUniverse && (
+											<span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-primary">
+												{selectedUniverse.name} · 第 {nextChapterNumber} 章
+											</span>
+										)}
+									</div>
+									<Button
+										variant="primary"
+										size="lg"
+										className="w-full justify-center gap-2 sm:w-auto"
+										onClick={handleSubmit}
+										disabled={!story.trim() || createMutation.isPending}
+										loading={createMutation.isPending}
+									>
+										{!createMutation.isPending && (
+											<PaperAirplaneIcon className="h-5 w-5" aria-hidden="true" />
+										)}
+										生成并进入画布
+									</Button>
+								</div>
+							</section>
+
+							<aside
+								className="border-t border-base-content/10 bg-base-200/45 p-4 sm:p-5 lg:border-l lg:border-t-0"
+								aria-label="创作设置"
+							>
+								<div className="space-y-5">
+									<section aria-labelledby="universe-heading">
+										<div className="mb-2 flex items-center justify-between gap-3">
+											<h2
+												id="universe-heading"
+												className="m-0 font-heading text-sm font-bold"
+											>
+												IP 宇宙
+											</h2>
+											<Link
+												to="/universes"
+												className="text-xs font-bold text-base-content/60 transition-colors hover:text-primary"
+											>
+												管理
+											</Link>
+										</div>
+										<select
+											id="home-universe-select"
+											name="universe_id"
+											className="select select-bordered min-h-11 w-full bg-base-100 text-sm font-semibold"
+											value={selectedUniverseId ?? ""}
+											onChange={(event) => {
+												const value = event.target.value;
+												setSelectedUniverseId(value ? Number(value) : null);
+											}}
+											disabled={universesLoading}
+											aria-label="选择 IP 宇宙"
+										>
+											<option value="">
+												{universesLoading ? "加载宇宙..." : "独立项目"}
+											</option>
+											{universes.map((universe) => (
+												<option key={universe.id} value={universe.id}>
+													{universe.name}
+												</option>
+											))}
+										</select>
+										<p className="m-0 mt-2 text-xs leading-relaxed text-base-content/60">
+											{selectedUniverse
+												? `将作为第 ${nextChapterNumber} 章创建，沿用该宇宙的世界观、风格规则和共享角色。`
+												: "不选择宇宙时会创建独立工作区。"}
+										</p>
+									</section>
+
+									<section aria-labelledby="mode-heading">
+										<h2
+											id="mode-heading"
+											className="m-0 mb-2 font-heading text-sm font-bold"
+										>
+											生成方式
+										</h2>
+										<div className="grid grid-cols-2 gap-2">
+											{[
+												{ value: "review", label: "审阅", icon: "check" },
+												{ value: "quick", label: "快速", icon: "zap" },
+											].map((mode) => (
+												<button
+													key={mode.value}
+													type="button"
+													className={`touch-target flex items-center justify-center gap-2 rounded-lg border-2 px-3 py-2 text-sm font-bold transition-colors ${
+														creationMode === mode.value
+															? "border-primary bg-primary text-primary-content"
+															: "border-base-content/15 bg-base-100 text-base-content/70 hover:border-primary/40"
+													}`}
+													onClick={() =>
+														setCreationMode(mode.value as "review" | "quick")
+													}
+													aria-pressed={creationMode === mode.value}
+												>
+													<SvgIcon name={mode.icon as "check" | "zap"} size={16} />
+													{mode.label}
+												</button>
+											))}
+										</div>
+									</section>
+
+									<section aria-labelledby="style-heading">
+										<h2
+											id="style-heading"
+											className="m-0 mb-2 font-heading text-sm font-bold"
+										>
+											常用风格
+										</h2>
+										<div className="grid grid-cols-2 gap-2">
+											{PRIMARY_STYLE_OPTIONS.map((opt) => (
 												<button
 													key={opt.value}
 													type="button"
-													className={`px-2 py-0.5 rounded-full border-2 text-[11px] font-bold transition-all duration-150 ${
+													className={`touch-target rounded-lg border-2 px-3 py-2 text-sm font-bold transition-colors ${
 														style === opt.value
-															? "border-primary bg-primary/10 text-primary -translate-y-0.5 shadow-comic"
-															: "border-base-content/10 bg-base-200/50 text-base-content/50 hover:border-primary/30 hover:-translate-y-0.5"
+															? "border-primary bg-primary text-primary-content shadow-brutal-sm"
+															: "border-base-content/15 bg-base-100 text-base-content/70 hover:border-primary/40"
 													}`}
 													onClick={() => setStyle(opt.value)}
+													aria-pressed={style === opt.value}
 												>
 													{opt.label}
 												</button>
 											))}
 										</div>
-										{ci < STYLE_CATEGORIES.length - 1 && (
-											<div className="hidden sm:block flex-1 border-b border-base-content/5" />
-										)}
-									</div>
-								))}
-								<div className="flex items-center gap-1.5 flex-wrap pt-1">
-									<span className="text-[10px] text-base-content/30 font-bold uppercase tracking-wider w-14 flex-shrink-0">
-										创作模式
-									</span>
-									<div className="flex gap-1 flex-wrap items-center">
-										{[
-											{ value: "review", label: "精细审阅", icon: "check" },
-											{ value: "quick", label: "快速生成", icon: "zap" },
-										].map((mode) => (
-											<button
-												key={mode.value}
-												type="button"
-												className={`px-2 py-0.5 rounded-full border-2 text-[11px] font-bold transition-all duration-150 inline-flex items-center gap-1 ${
-													creationMode === mode.value
-														? "border-primary bg-primary/10 text-primary -translate-y-0.5 shadow-comic"
-														: "border-base-content/10 bg-base-200/50 text-base-content/50 hover:border-primary/30 hover:-translate-y-0.5"
-												}`}
-												onClick={() =>
-													setCreationMode(mode.value as "review" | "quick")
-												}
-												aria-pressed={creationMode === mode.value}
+									</section>
+
+									<section aria-labelledby="reference-heading">
+										<div className="mb-2 flex items-center justify-between gap-3">
+											<h2
+												id="reference-heading"
+												className="m-0 font-heading text-sm font-bold"
 											>
-												<SvgIcon name={mode.icon as "check" | "zap"} size={11} />
-												{mode.label}
-											</button>
-										))}
-									</div>
-								</div>
-								<div className="flex items-center justify-end">
-									<button
-										type="button"
-										className="flex items-center gap-0.5 text-xs text-base-content/30 hover:text-primary transition-colors px-1.5"
-										onClick={() => setShowAdvanced(!showAdvanced)}
-										aria-expanded={showAdvanced}
-									>
-										{showAdvanced ? (
-											<ChevronUpIcon className="w-3 h-3" />
-										) : (
-											<ChevronDownIcon className="w-3 h-3" />
-										)}
-										更多
-									</button>
-								</div>
-							</div>
-
-							{showAdvanced && (
-								<div className="space-y-2 border-t border-base-content/10 pt-2">
-									<div>
-										<label
-											htmlFor="shot-count"
-											className="text-xs text-base-content/40 mb-0.5 block font-comic uppercase tracking-wide"
-										>
-											镜头数 {shotCount ?? "自动"}
-										</label>
-										<input
-											id="shot-count"
-											type="range"
-											min={1}
-											max={20}
-											value={shotCount ?? 6}
-											onChange={(e) => setShotCount(Number(e.target.value))}
-											className="range range-xs range-primary"
-										/>
-									</div>
-
-									<div>
-										<label className="text-xs text-base-content/40 mb-0.5 block font-comic uppercase tracking-wide">
-											角色提示
-										</label>
-										{characterHints.map((hint, i) => (
-											<div key={i} className="flex gap-1 mb-1">
-												<input
-													type="text"
-													className="input input-bordered input-sm bg-base-200/60 flex-1 text-xs border-2"
-													placeholder={`角色 ${i + 1}`}
-													value={hint}
-													onChange={(e) =>
-														updateCharacterHint(i, e.target.value)
-													}
-												/>
-												{characterHints.length > 1 && (
+												参考图
+											</h2>
+											<span className="font-mono text-xs text-base-content/70">
+												{referenceImages.length}/7
+											</span>
+										</div>
+										{referenceImages.length > 0 ? (
+											<div className="flex flex-wrap gap-2">
+												{referenceImages.map((img, i) => (
+													<div
+														key={i}
+														className="group relative h-14 w-14 overflow-hidden rounded-lg border-2 border-base-content/10"
+													>
+														<img
+															src={img}
+															alt={`参考图 ${i + 1}`}
+															className="h-full w-full object-cover"
+														/>
+														<button
+															type="button"
+															className="absolute inset-0 flex items-center justify-center bg-error/60 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100"
+															onClick={() => removeReferenceImage(i)}
+															aria-label={`删除参考图 ${i + 1}`}
+														>
+															<SvgIcon
+																name="x"
+																size={18}
+																className="text-error-content"
+															/>
+														</button>
+													</div>
+												))}
+												{referenceImages.length < 7 && (
 													<button
 														type="button"
-														className="btn btn-ghost btn-xs"
-														onClick={() => removeCharacterHint(i)}
-														aria-label={`删除角色 ${i + 1}`}
+														className="touch-target flex h-14 w-14 items-center justify-center rounded-lg border-2 border-dashed border-base-content/20 text-base-content/70 transition-colors hover:border-primary/50 hover:text-primary"
+														onClick={() => fileInputRef.current?.click()}
+														aria-label="添加参考图"
 													>
-														×
+														<SvgIcon name="plus" size={18} />
 													</button>
 												)}
 											</div>
-										))}
-										{characterHints.length < 6 && (
+										) : (
 											<button
 												type="button"
-												className="btn btn-ghost btn-xs text-primary"
-												onClick={addCharacterHint}
+												className="touch-target inline-flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-base-content/20 bg-base-100/70 px-3 py-2 text-sm font-semibold text-base-content/75 transition-colors hover:border-primary/50 hover:text-primary"
+												onClick={() => fileInputRef.current?.click()}
 											>
-												+ 添加
+												<SvgIcon name="image" size={16} />
+												添加参考图
 											</button>
 										)}
-									</div>
+										<input
+											ref={fileInputRef}
+											id="reference-images"
+											name="reference_images"
+											type="file"
+											accept="image/*"
+											multiple
+											className="hidden"
+											onChange={(e) => {
+												handleImageUpload(e.target.files);
+												e.target.value = "";
+											}}
+										/>
+									</section>
+
+									<button
+										type="button"
+										className="touch-target flex w-full items-center justify-between rounded-lg border border-base-content/10 bg-base-100 px-3 text-sm font-bold text-base-content/75 transition-colors hover:border-primary/40 hover:text-primary"
+										onClick={() => setShowAdvanced(!showAdvanced)}
+										aria-expanded={showAdvanced}
+									>
+										<span>更多设置</span>
+										{showAdvanced ? (
+											<ChevronUpIcon className="h-4 w-4" aria-hidden="true" />
+										) : (
+											<ChevronDownIcon className="h-4 w-4" aria-hidden="true" />
+										)}
+									</button>
+
+									{showAdvanced && (
+										<div className="space-y-3 border-t border-base-content/10 pt-4">
+											<label className="form-control">
+												<span className="label px-0 pb-1">
+													<span className="label-text text-xs font-mono uppercase text-base-content/70">
+														完整风格
+													</span>
+												</span>
+												<select
+													className="select select-bordered min-h-11 bg-base-100 text-sm font-semibold"
+													value={style}
+													onChange={(event) => setStyle(event.target.value)}
+													aria-label="完整风格"
+												>
+													{STYLE_CATEGORIES.map((category) => (
+														<optgroup key={category.group} label={category.group}>
+															{category.styles.map((opt) => (
+																<option key={opt.value} value={opt.value}>
+																	{opt.label}
+																</option>
+															))}
+														</optgroup>
+													))}
+												</select>
+											</label>
+
+											<label className="form-control">
+												<span className="label px-0 pb-1">
+													<span className="label-text text-xs font-mono uppercase text-base-content/70">
+														镜头数
+													</span>
+												</span>
+												<div className="flex items-center gap-2">
+													<input
+														id="shot-count"
+														type="number"
+														min={1}
+														max={20}
+														value={shotCount ?? ""}
+														placeholder="自动"
+														onChange={(e) =>
+															setShotCount(
+																e.target.value ? Number(e.target.value) : undefined,
+															)
+														}
+														className="input input-bordered min-h-11 flex-1 bg-base-100 text-sm font-semibold"
+														aria-label="镜头数"
+													/>
+													<button
+														type="button"
+														className="btn btn-ghost min-h-11 px-3 text-xs"
+														onClick={() => setShotCount(undefined)}
+													>
+														自动
+													</button>
+												</div>
+											</label>
+
+											<div>
+												<div className="mb-1 flex items-center justify-between gap-2">
+													<p className="m-0 text-xs font-mono uppercase text-base-content/70">
+														角色提示
+													</p>
+													{characterHints.length < 6 ? (
+														<button
+															type="button"
+															className="btn btn-ghost btn-sm min-h-11 px-3 text-base-content/80 hover:text-primary"
+															onClick={addCharacterHint}
+														>
+															添加
+														</button>
+													) : null}
+												</div>
+												<div className="space-y-2">
+													{characterHints.map((hint, i) => (
+														<div key={i} className="flex gap-2">
+															<input
+																type="text"
+																className="input input-bordered input-sm min-h-11 min-w-0 flex-1 bg-base-100 text-sm"
+																placeholder={`角色 ${i + 1}`}
+																value={hint}
+																onChange={(e) =>
+																	updateCharacterHint(i, e.target.value)
+																}
+															/>
+															{characterHints.length > 1 ? (
+																<button
+																	type="button"
+																	className="btn btn-ghost btn-sm btn-square min-h-11 text-error"
+																	onClick={() => removeCharacterHint(i)}
+																	aria-label={`删除角色 ${i + 1}`}
+																>
+																	<SvgIcon name="x" size={15} />
+																</button>
+															) : null}
+														</div>
+													))}
+												</div>
+											</div>
+										</div>
+									)}
 								</div>
-							)}
+							</aside>
 						</div>
 					</Card>
 				</main>

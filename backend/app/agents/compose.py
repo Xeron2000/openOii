@@ -11,10 +11,15 @@ from app.agents.utils import build_character_context
 from app.models.project import Character, Shot
 from app.orchestration.state import workflow_progress_for_stage
 from app.services.audio_service import AudioService
+from app.services.character_bible import build_character_bible
 from app.services.creative_control import collect_project_blocking_clips
 from app.services.doubao_video import DoubaoVideoService
 from app.services.image_composer import ImageComposer
 from app.services.shot_binding import resolve_shot_bound_approved_characters
+from app.services.style_prompts import (
+    VIDEO_CONTINUITY_LOCK,
+    resolve_style_prompt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +31,40 @@ class ComposeAgent(BaseAgent):
         super().__init__()
         self.image_composer = ImageComposer()
 
-    def _build_video_prompt(self, shot: Shot, characters: list[Character], *, style: str) -> str:
+    async def _build_video_prompt(
+        self, shot: Shot, characters: list[Character], *, style: str, session
+    ) -> str:
         desc = shot.prompt or shot.description
         parts = [desc.strip()]
+        for char in characters:
+            bible_text = build_character_bible(char)
+            if bible_text:
+                parts.append(f"Character {char.name}: {bible_text}")
         char_context = build_character_context(characters)
         if char_context:
             parts.append(char_context)
-        if style.strip():
-            parts.append(f"Style: {style.strip()}")
+        resolved_style = await resolve_style_prompt(session, style)
+        if characters:
+            parts.append(f"Continuity lock: {VIDEO_CONTINUITY_LOCK}")
+        parts.append(f"Visual style lock: {resolved_style.style_prompt}")
+        parts.append(f"Avoid: {resolved_style.negative_prompt}")
         return ", ".join(parts)
+
+    def _build_i2v_prompt(self, prompt: str, *, image_mode: str) -> str:
+        guidance = (
+            "Use the provided image as the first-frame visual anchor. Preserve the same "
+            "visible characters, outfits, hair colors, scene layout, framing, and camera "
+            "distance. Keep the same 2D comic/anime rendering style. Do not convert the image "
+            "to live-action, photorealistic, hyperrealistic, or 3D realistic footage. Do not "
+            "replace a clear character shot with a wide establishing shot. Do not redesign "
+            "characters or change their face, hair, outfit, accessories, or color palette."
+        )
+        if image_mode == "reference":
+            guidance += (
+                " If the reference image contains a scene frame plus character panels, animate "
+                "the scene frame and use the character panels only to preserve identity."
+            )
+        return f"{guidance} {prompt}"
 
     def _get_duration(self, shot: Shot, default_duration: float) -> float:
         if shot.duration and shot.duration > 0:
@@ -99,7 +129,11 @@ class ComposeAgent(BaseAgent):
                     },
                 )
                 characters = await resolve_shot_bound_approved_characters(ctx.session, shot)
-                video_prompt = self._build_video_prompt(shot, characters, style=ctx.project.style)
+                video_prompt = await self._build_video_prompt(
+                    shot, characters, style=ctx.project.style, session=ctx.session
+                )
+                if use_image_mode and shot.image_url:
+                    video_prompt = self._build_i2v_prompt(video_prompt, image_mode=image_mode)
 
                 # Thinking: reasoning for each video
                 await self.send_thinking(
@@ -159,6 +193,7 @@ class ComposeAgent(BaseAgent):
                     video_url = await ctx.video.generate_url(
                         prompt=video_prompt,
                         image_bytes=reference_image_bytes,
+                        duration=duration,
                     )
 
                 shot.video_url = video_url
@@ -324,7 +359,9 @@ class ComposeAgent(BaseAgent):
         for i, shot in enumerate(shots):
             try:
                 await self.send_progress_batch(
-                    ctx, total=total, current=i,
+                    ctx,
+                    total=total,
+                    current=i,
                     message=f"   正在处理音频 {i + 1}/{total}...",
                 )
 
@@ -392,11 +429,43 @@ class ComposeAgent(BaseAgent):
 
             except Exception as e:
                 logger.warning("Audio processing failed for shot %s: %s", shot.id, e)
-                await self.send_message(
-                    ctx, f"分镜 {shot.order} 音频处理失败: {e}，跳过。"
-                )
+                await self.send_message(ctx, f"分镜 {shot.order} 音频处理失败: {e}，跳过。")
 
-        # 4. 为最终合并视频匹配 BGM
+        # 4. 如果分镜视频已混入配音，重新拼接最终视频，确保成片包含 TTS。
+        if audio_count > 0:
+            updated_video_urls = [shot.video_url for shot in shots if shot.video_url]
+            if updated_video_urls:
+                try:
+                    await self.send_message(
+                        ctx,
+                        "音频已写入分镜，正在重新拼接最终视频...",
+                        progress=0.8,
+                        is_loading=True,
+                    )
+                    merged_url = await ctx.video.merge_urls(updated_video_urls)
+                    ctx.project.video_url = merged_url
+                    ctx.project.status = "ready"
+                    ctx.session.add(ctx.project)
+                    await ctx.session.flush()
+                    await ctx.ws.send_event(
+                        ctx.project.id,
+                        {
+                            "type": "project_updated",
+                            "data": {
+                                "project": {
+                                    "id": ctx.project.id,
+                                    "video_url": merged_url,
+                                    "status": ctx.project.status,
+                                    "blocking_clips": [],
+                                }
+                            },
+                        },
+                    )
+                except Exception as e:
+                    logger.warning("Final video re-merge after audio failed: %s", e)
+                    await self.send_message(ctx, f"音频分镜重新拼接失败: {e}，保留原最终视频。")
+
+        # 5. 为最终合并视频匹配 BGM
         if bgm_enabled and ctx.project.video_url:
             try:
                 # 使用所有分镜的场景信息综合匹配

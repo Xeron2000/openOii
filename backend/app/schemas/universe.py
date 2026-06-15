@@ -63,7 +63,7 @@ class SharedCharacterRead(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _compute_has_embedding(_cls, data: object) -> object:
-        if isinstance(data, dict):
+        if isinstance(data, dict) and "face_embedding" in data:
             emb = data.get("face_embedding")
             data["has_embedding"] = bool(emb and isinstance(emb, str) and emb.strip())
             data.pop("face_embedding", None)

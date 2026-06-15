@@ -210,6 +210,29 @@ describe("projectsApi", () => {
 		);
 	});
 
+	it("reorderShots sends PATCH with items", async () => {
+		mockFetch.mockResolvedValueOnce(
+			new Response(JSON.stringify({ shots: [] }), { status: 200 }),
+		);
+		await projectsApi.reorderShots(1, [
+			{ shot_id: 10, order: 1 },
+			{ shot_id: 11, order: 2 },
+		]);
+
+		expect(mockFetch).toHaveBeenCalledWith(
+			expect.stringContaining("/api/v1/projects/1/shots/reorder"),
+			expect.objectContaining({
+				method: "PATCH",
+				body: JSON.stringify({
+					items: [
+						{ shot_id: 10, order: 1 },
+						{ shot_id: 11, order: 2 },
+					],
+				}),
+			}),
+		);
+	});
+
 	it("deleteMany sends batch delete POST", async () => {
 		mockFetch.mockResolvedValueOnce(new Response(null, { status: 204 }));
 		await projectsApi.deleteMany([1, 2, 3]);

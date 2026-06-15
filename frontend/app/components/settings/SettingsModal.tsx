@@ -32,6 +32,9 @@ export function SettingsModal() {
 	const { isModalOpen, closeModal } = useSettingsStore();
 	const queryClient = useQueryClient();
 	const [formState, setFormState] = useState<Record<string, ConfigValue>>({});
+	const [initialFormState, setInitialFormState] = useState<
+		Record<string, ConfigValue>
+	>({});
 	const [activeTab, setActiveTab] = useState("database");
 	const [isTestingConnection, setIsTestingConnection] = useState(false);
 	const [alertState, setAlertState] = useState<AlertState>({
@@ -61,6 +64,7 @@ export function SettingsModal() {
 				{} as Record<string, ConfigValue>,
 			);
 			setFormState(initialState);
+			setInitialFormState(initialState);
 		}
 	}, [config]);
 
@@ -72,8 +76,9 @@ export function SettingsModal() {
 	const updateMutation = useMutation({
 		mutationFn: (newConfig: Record<string, ConfigValue>) =>
 			configApi.update(newConfig),
-		onSuccess: (data) => {
+		onSuccess: (data, submittedConfig) => {
 			queryClient.invalidateQueries({ queryKey: ["config"] });
+			setInitialFormState((prev) => ({ ...prev, ...submittedConfig }));
 			// 不要立即关闭模态框，等用户点击确定后再关闭
 
 			// 根据后端返回判断是否需要重启
@@ -206,7 +211,24 @@ export function SettingsModal() {
 
 	const handleSubmit = (e: React.FormEvent) => {
 		e.preventDefault();
-		updateMutation.mutate(formState);
+		const changedConfig = Object.fromEntries(
+			Object.entries(formState).filter(([key, value]) => {
+				const initialValue = initialFormState[key];
+				return String(value ?? "") !== String(initialValue ?? "");
+			}),
+		);
+
+		if (Object.keys(changedConfig).length === 0) {
+			setAlertState({
+				show: true,
+				type: "success",
+				title: "没有变更",
+				message: "当前配置已是最新。",
+			});
+			return;
+		}
+
+		updateMutation.mutate(changedConfig);
 	};
 
 	const handleCancel = () => {
@@ -252,7 +274,7 @@ export function SettingsModal() {
 		image: {
 			icon: <PhotoIcon className="w-4 h-4" />,
 			title: "图像服务",
-			desc: "图像生成服务配置，支持 OpenAI 兼容接口和 Fake 本地测试",
+			desc: "图像生成服务配置，默认使用 ModelScope Z-Image-Turbo，也支持 OpenAI 兼容接口和 Fake 本地测试",
 		},
 		video: {
 			icon: <VideoCameraIcon className="w-4 h-4" />,
@@ -281,7 +303,7 @@ export function SettingsModal() {
 	const getImageProvider = () => {
 		return (formState["IMAGE_PROVIDER"] ||
 			formState["image_provider"] ||
-			"openai") as string;
+			"modelscope") as string;
 	};
 
 	// 渲染单个配置项
@@ -484,7 +506,7 @@ export function SettingsModal() {
 		const commonItems = activeSection.items.filter(
 			(i) => i.key.toLowerCase() === "enable_image_to_image",
 		);
-		const openaiItems = activeSection.items.filter(
+		const imageApiItems = activeSection.items.filter(
 			(i) =>
 				i.key.toLowerCase().startsWith("image_") &&
 				i.key.toLowerCase() !== "image_provider",
@@ -506,10 +528,10 @@ export function SettingsModal() {
 							<span className="font-mono font-bold text-sm">IMAGE_PROVIDER</span>
 							<span className="badge badge-primary badge-xs">必选</span>
 						</div>
-						<div className="flex gap-4">
+						<div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
 							<label
 								className={`
-                flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
+                flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
                 ${
 									imageProvider === "openai"
 										? "border-accent bg-accent/10"
@@ -528,13 +550,38 @@ export function SettingsModal() {
 								<div>
 									<div className="font-bold">OpenAI 兼容</div>
 									<div className="text-xs text-base-content/60">
-										调用配置的图像生成接口
+										可用于 gpt-image-2 等兼容接口
 									</div>
 								</div>
 							</label>
 							<label
 								className={`
-                flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
+                flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
+                ${
+									imageProvider === "modelscope"
+										? "border-accent bg-accent/10"
+										: "border-base-content/30 hover:bg-base-300"
+								}
+              `}
+							>
+								<input
+									type="radio"
+									name="IMAGE_PROVIDER"
+									value="modelscope"
+									checked={imageProvider === "modelscope"}
+									onChange={handleInputChange}
+									className="radio radio-accent"
+								/>
+								<div>
+									<div className="font-bold">ModelScope</div>
+									<div className="text-xs text-base-content/60">
+										异步图片任务，支持 Z-Image-Turbo
+									</div>
+								</div>
+							</label>
+							<label
+								className={`
+                flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all
                 ${
 									imageProvider === "fake"
 										? "border-accent bg-accent/10"
@@ -561,14 +608,17 @@ export function SettingsModal() {
 					</div>
 				)}
 
-				{imageProvider === "openai" && openaiItems.length > 0 && (
+				{(imageProvider === "modelscope" || imageProvider === "openai") &&
+					imageApiItems.length > 0 && (
 					<div className="space-y-4">
 						<h4 className="font-bold text-sm flex items-center gap-2 text-accent">
 							<PhotoIcon className="w-4 h-4" />
-							OpenAI 兼容接口配置
+							{imageProvider === "modelscope"
+								? "ModelScope 图像接口配置"
+								: "OpenAI 兼容接口配置"}
 						</h4>
 						<div className="space-y-4 pl-4 bg-accent/5 rounded-r-lg py-2">
-							{openaiItems.map(renderConfigItem)}
+							{imageApiItems.map(renderConfigItem)}
 						</div>
 					</div>
 				)}
@@ -824,17 +874,28 @@ export function SettingsModal() {
 	};
 
 	return (
-		<div className="modal modal-open">
+		<div
+			className="modal modal-open"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="settings-modal-title"
+		>
 			<div className="modal-box w-11/12 max-w-5xl max-h-[90vh] border-3 border-base-content/30 shadow-brutal-lg bg-base-100 p-0 flex flex-col">
 				{/* 头部 */}
 				<div className="flex items-center justify-between px-6 py-4 border-b-3 border-base-content/30 bg-base-200 shrink-0">
-					<h3 className="font-bold text-xl flex items-center gap-2">
+					<h3
+						id="settings-modal-title"
+						className="font-bold text-xl flex items-center gap-2"
+					>
 						<Cog6ToothIcon className="w-6 h-6 text-accent" />
 						环境变量配置管理
 					</h3>
 					<button
+						type="button"
 						onClick={handleCancel}
-						className="btn btn-sm btn-ghost btn-circle"
+						className="btn btn-ghost btn-circle h-11 min-h-11 w-11"
+						aria-label="关闭设置"
+						title="关闭设置"
 					>
 						<XMarkIcon className="w-5 h-5" />
 					</button>
@@ -1047,11 +1108,13 @@ function getConfigDescription(key: string): string {
 
 		// 图像服务
 		IMAGE_PROVIDER:
-			"图像生成服务提供商：openai（OpenAI 兼容）/ fake（本地测试，不调用外部 API）",
-		IMAGE_BASE_URL: "图像生成服务地址（OpenAI 兼容接口）",
+			"图像生成服务提供商：modelscope（ModelScope 异步图片任务）/ openai（OpenAI 兼容）/ fake（本地测试，不调用外部 API）",
+		IMAGE_BASE_URL:
+			"图像生成服务地址；ModelScope 使用 https://api-inference.modelscope.cn，gpt-image-2 使用 https://image.6668.dpdns.org/v1",
 		IMAGE_API_KEY: "图像生成 API 密钥",
-		IMAGE_MODEL: "图像生成模型名称，如 dall-e-3",
-		IMAGE_ENDPOINT: "图像生成 API 端点路径",
+		IMAGE_MODEL: "图像生成模型名称，如 gpt-image-2 或 Tongyi-MAI/Z-Image-Turbo",
+		IMAGE_ENDPOINT:
+			"图像生成 API 端点路径；gpt-image-2 使用 /chat/completions，ModelScope 使用 /v1/images/generations",
 		ENABLE_IMAGE_TO_IMAGE: "是否启用图生图（I2I）功能",
 		FAKE_IMAGE_FIXTURE_URL:
 			"Fake 图像 Provider 固定返回的图片 URL（可选）；留空时使用后端内置本地 SVG 占位图，不调用外部图像 API。",

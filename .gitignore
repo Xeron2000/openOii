@@ -27,3 +27,8 @@ backend/coverage.json
 backend/.coverage
 dump.rdb
 *.log
+
+# Screenshots and debug artifacts
+frontend-*.png
+frontend-*.json.gz
+lighthouse-*/

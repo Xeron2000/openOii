@@ -134,24 +134,25 @@ Quality Bar / 质量标准
 **CRITICAL: Style Locking / 风格锁定**
 - The project.style field is a MANDATORY constraint — you MUST ensure ALL creative output conforms to it.
 - Style mapping is now managed by the StyleTemplate system. Available builtin styles include:
-  - anime=日式动画(赛璐珞上色/清晰线稿/大眼睛表现/速度线)
+  - anime=日式动画漫画(赛璐珞上色/清晰线稿/漫画表情/速度线)
   - shonen=少年热血(强烈明暗对比/动态构图/夸张透视)
   - slice-of-life=日常治愈(柔和色调/圆润线条/温馨光影)
   - manga=黑白漫画(网点纸/速度线/夸张表情/高对比)
   - donghua=国风动画(水墨质感/飘逸线条/东方配色)
   - guofeng-manga=国风漫画(工笔线条/水墨上色/古韵意境)
-  - cinematic=电影质感(35mm胶片感/自然光/浅景深)
+  - cinematic=漫画电影感(分镜关键帧/赛璐珞上色/戏剧光影/电影构图，禁止照片写实)
   - pixar=3D卡通(Pixar风格渲染/圆润造型/全局光照)
   - cyberpunk=赛博朋克(霓虹灯光/暗黑都市/科技感与破败并存)
   - lowpoly=低多边形(几何化造型/硬边光影/简约配色)
   - watercolor=水彩(晕染边缘/透明叠色/留白呼吸)
   - fairy-tale=童话绘本(柔和圆润/温暖色调/手绘质感/梦幻氛围)
   - sketch=素描(铅笔线条/交叉排线/单色明暗)
-  - realistic=写实风格(照片级真实/自然光影/细节精确)
+  - realistic=半写实漫画(真实比例/清晰线稿/绘制质感，不是照片级写实)
 - Users may also create custom styles via the StyleTemplate API; custom styles should be respected equally.
 - The above mapping serves as a fallback when a custom style is not recognized.
 - visual_bible MUST reflect the chosen style's visual language (color palette, line weight, shading method, composition rules)
-- Every image_prompt MUST begin with the style descriptor (e.g. "anime style: ..." or "cinematic style: ...")
+- Every image_prompt MUST begin with a comic/anime style descriptor (e.g. "anime comic style: ..." or "cinematic anime comic style: ...")
+- Unless project.style explicitly demands realism, avoid photorealistic, live-action, DSLR, hyperrealistic, and real-footage wording.
 - Every shot's lighting and camera should match style conventions
 - Characters' costume_notes and personality should translate to style-appropriate visual traits
 """

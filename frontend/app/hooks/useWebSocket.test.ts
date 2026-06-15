@@ -40,6 +40,46 @@ class MockWebSocket {
   }
 }
 
+function shotForWs(id: number, order: number) {
+  return {
+    id,
+    project_id: 1,
+    order,
+    description: `shot ${order}`,
+    prompt: null,
+    image_prompt: null,
+    image_url: null,
+    video_url: null,
+    duration: null,
+    camera: null,
+    motion_note: null,
+    scene: null,
+    action: null,
+    expression: null,
+    lighting: null,
+    dialogue: null,
+    sfx: null,
+    seed: null,
+    character_ids: [],
+    approval_state: "draft",
+    approval_version: 0,
+    approved_at: null,
+    approved_description: null,
+    approved_prompt: null,
+    approved_image_prompt: null,
+    approved_duration: null,
+    approved_camera: null,
+    approved_motion_note: null,
+    approved_scene: null,
+    approved_action: null,
+    approved_expression: null,
+    approved_lighting: null,
+    approved_dialogue: null,
+    approved_sfx: null,
+    approved_character_ids: [],
+  };
+}
+
 describe("useProjectWebSocket", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -852,6 +892,27 @@ describe("useProjectWebSocket", () => {
     }
   });
 
+  it("handles shots_reordered by replacing shots in backend order", () => {
+    const store = useEditorStore.getState();
+    store.reset();
+    store.setShots([shotForWs(1, 1), shotForWs(2, 2)] as never);
+
+    applyWsEvent(
+      {
+        type: "shots_reordered",
+        data: {
+          project_id: 1,
+          shots: [shotForWs(1, 2), shotForWs(2, 1)],
+        },
+      } as never,
+      store,
+      noopAutoConfirm
+    );
+
+    expect(useEditorStore.getState().shots.map((shot) => shot.id)).toEqual([2, 1]);
+    expect(useEditorStore.getState().shots.map((shot) => shot.order)).toEqual([1, 2]);
+  });
+
   it("does not reconnect after explicit disconnect close", () => {
     const { result } = renderHook(() => useProjectWebSocket(61));
     const ws = MockWebSocket.instances[0];
@@ -1456,10 +1517,9 @@ describe("useProjectWebSocket", () => {
       tts_url: "/static/audio/shot7.mp3",
       bgm_type: "warm",
     });
-    expect(toastMock.success).toHaveBeenCalledWith(
+    expect(toastMock.success).not.toHaveBeenCalledWith(
       expect.objectContaining({
         title: "导出完成",
-        message: "PDF 漫画册已生成",
       })
     );
   });

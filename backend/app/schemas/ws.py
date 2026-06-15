@@ -32,6 +32,7 @@ WsEventType = Literal[
     "character_deleted",
     "shot_created",
     "shot_updated",
+    "shots_reordered",
     "shot_deleted",
     # Kept for backward compatibility; current outline writes usually emit
     # project_updated, but stale clients/tests may still send outline_updated.
@@ -174,6 +175,11 @@ class CharacterUpdatedEventData(BaseModel):
 
 class ShotUpdatedEventData(BaseModel):
     shot: ShotRead
+
+
+class ShotsReorderedEventData(BaseModel):
+    project_id: int
+    shots: list[ShotRead]
 
 
 class BlockingClipPayload(BaseModel):

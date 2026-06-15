@@ -1,0 +1,162 @@
+import { describe, expect, it } from "vitest";
+import type { Character, Project, Shot } from "~/types";
+import { buildComicWorkflow } from "./buildComicWorkflow";
+import { layoutComicWorkflow } from "./layoutComicWorkflow";
+
+function project(): Project {
+	return {
+		id: 1,
+		title: "项目",
+		story: "故事",
+		style: null,
+		summary: null,
+		video_url: null,
+		status: "draft",
+		target_shot_count: 2,
+		character_hints: [],
+		creation_mode: "manual",
+		reference_images: [],
+		exports: [],
+		created_at: "",
+		updated_at: "",
+		provider_settings: {
+			text: provider(),
+			image: provider(),
+			video: provider(),
+		},
+	};
+}
+
+function provider() {
+	return {
+		selected_key: "default",
+		source: "default" as const,
+		resolved_key: null,
+		valid: true,
+		reason_code: null,
+		reason_message: null,
+	};
+}
+
+function character(id: number): Character {
+	return {
+		id,
+		project_id: 1,
+		name: `角色 ${id}`,
+		description: null,
+		image_url: null,
+		reference_images: [],
+		has_embedding: false,
+		visual_notes: null,
+		approval_state: "draft",
+		approval_version: 1,
+		approved_at: null,
+		approved_name: null,
+		approved_description: null,
+		approved_image_url: null,
+	};
+}
+
+function shot(id: number, order: number): Shot {
+	return {
+		id,
+		project_id: 1,
+		order,
+		description: `镜头 ${order}`,
+		prompt: null,
+		image_prompt: null,
+		image_url: null,
+		video_url: null,
+		duration: null,
+		camera: null,
+		motion_note: null,
+		scene: null,
+		action: null,
+		expression: null,
+		lighting: null,
+		dialogue: null,
+		sfx: null,
+		seed: null,
+		character_ids: [],
+		approval_state: "draft",
+		approval_version: 1,
+		approved_at: null,
+		approved_description: null,
+		approved_prompt: null,
+		approved_image_prompt: null,
+		approved_duration: null,
+		approved_camera: null,
+		approved_motion_note: null,
+		approved_scene: null,
+		approved_action: null,
+		approved_expression: null,
+		approved_lighting: null,
+		approved_dialogue: null,
+		approved_sfx: null,
+		approved_character_ids: [],
+	};
+}
+
+describe("layoutComicWorkflow", () => {
+	it("lays out the four frames in workflow order", () => {
+		const graph = buildComicWorkflow({
+			project: project(),
+			characters: [character(1)],
+			shots: [shot(10, 1)],
+			blockingClips: [],
+			isGenerating: false,
+		});
+
+		const layout = layoutComicWorkflow(graph);
+
+		expect(layout.frames.map((frame) => frame.section)).toEqual([
+			"brief",
+			"elements",
+			"shotline",
+			"output",
+		]);
+		expect(layout.frames[1].x).toBeGreaterThan(layout.frames[0].x);
+		expect(layout.frames[2].y).toBeGreaterThan(layout.frames[1].y);
+		expect(layout.frames[3].x).toBeGreaterThan(layout.frames[2].x);
+	});
+
+	it("keeps shot cards in ascending order on the x axis", () => {
+		const graph = buildComicWorkflow({
+			project: project(),
+			characters: [],
+			shots: [shot(11, 2), shot(10, 1), shot(12, 3)],
+			blockingClips: [],
+			isGenerating: false,
+		});
+
+		const shotNodes = layoutComicWorkflow(graph).nodes.filter((node) =>
+			node.id.startsWith("shot:"),
+		);
+
+		expect(shotNodes.map((node) => node.id)).toEqual([
+			"shot:10",
+			"shot:11",
+			"shot:12",
+		]);
+		expect(shotNodes[0].x).toBeLessThan(shotNodes[1].x);
+		expect(shotNodes[1].x).toBeLessThan(shotNodes[2].x);
+	});
+
+	it("keeps shot cards tall enough for media, copy, and metadata", () => {
+		const graph = buildComicWorkflow({
+			project: project(),
+			characters: [],
+			shots: [shot(10, 1)],
+			blockingClips: [],
+			isGenerating: false,
+		});
+
+		const layout = layoutComicWorkflow(graph);
+		const shotNode = layout.nodes.find((node) => node.id === "shot:10");
+		const shotFrame = layout.frames.find((frame) => frame.section === "shotline");
+
+		expect(shotNode?.w).toBe(320);
+		expect(shotNode?.h).toBe(430);
+		expect(shotFrame?.h).toBeGreaterThanOrEqual(560);
+	});
+});

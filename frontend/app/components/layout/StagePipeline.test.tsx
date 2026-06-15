@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
+import { getWorkbenchStatusMeta } from "~/features/comic-workflow/state/deriveWorkbenchStatus";
 import { StagePipeline } from "./StagePipeline";
 
 function renderStagePipeline(props: Partial<Parameters<typeof StagePipeline>[0]> = {}) {
@@ -9,6 +10,7 @@ function renderStagePipeline(props: Partial<Parameters<typeof StagePipeline>[0]>
 		<StagePipeline
 			currentStage="plan"
 			isGenerating={false}
+			workbenchStatus={getWorkbenchStatusMeta("idle")}
 			awaitingConfirm={false}
 			hasRecovery={false}
 			onResume={vi.fn()}
@@ -19,11 +21,19 @@ function renderStagePipeline(props: Partial<Parameters<typeof StagePipeline>[0]>
 }
 
 describe("StagePipeline", () => {
-	it("opens the chat drawer from the compact chat action", async () => {
+	it("does not duplicate the sidebar chat entry while idle", () => {
+		renderStagePipeline({ onToggleChat: vi.fn() });
+
+		expect(
+			screen.queryByRole("button", { name: "打开对话面板" }),
+		).not.toBeInTheDocument();
+	});
+
+	it("opens the chat drawer from the confirmation action", async () => {
 		const user = userEvent.setup();
 		const onToggleChat = vi.fn();
 
-		renderStagePipeline({ onToggleChat });
+		renderStagePipeline({ awaitingConfirm: true, onToggleChat });
 
 		await user.click(screen.getByRole("button", { name: "打开对话面板" }));
 
@@ -36,5 +46,16 @@ describe("StagePipeline", () => {
 		expect(
 			screen.queryByRole("button", { name: "打开对话面板" }),
 		).not.toBeInTheDocument();
+	});
+
+	it("announces the current workbench status", () => {
+		renderStagePipeline({
+			workbenchStatus: getWorkbenchStatusMeta("awaitingConfirm"),
+		});
+
+		expect(screen.getByText("工作台状态：待确认")).toBeInTheDocument();
+		expect(screen.getByTitle("正在等待创作者确认后继续")).toHaveTextContent(
+			"待确认",
+		);
 	});
 });

@@ -20,7 +20,7 @@ class ProjectProviderOverrides(Protocol):
 
 
 TEXT_PROVIDER_KEYS = ("anthropic", "openai", "fake")
-IMAGE_PROVIDER_KEYS = ("openai", "fake")
+IMAGE_PROVIDER_KEYS = ("modelscope", "openai", "fake")
 VIDEO_PROVIDER_KEYS = ("openai", "doubao", "fake")
 TEXT_PROBE_TTL_S = 300.0
 TEXT_PROBE_GENERATE_FAILURE_TTL_S = 15.0
@@ -272,7 +272,11 @@ def resolve_project_provider_settings(
         override_key=project.image_provider_override,
         default_key=settings.image_provider,
         supported_keys=IMAGE_PROVIDER_KEYS,
-        credential_ok={"openai": bool(settings.image_api_key), "fake": True},
+        credential_ok={
+            "modelscope": bool(settings.image_api_key),
+            "openai": bool(settings.image_api_key),
+            "fake": True,
+        },
         modality_label="图像",
     )
     video = _resolve_entry(

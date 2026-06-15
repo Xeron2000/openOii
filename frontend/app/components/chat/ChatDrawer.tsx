@@ -7,21 +7,15 @@ import { ChatPanel } from "~/components/chat/ChatPanel";
 interface ChatDrawerProps {
 	onSendFeedback: (content: string) => void;
 	onConfirm: (feedback?: string) => void;
-	onGenerate: () => void;
 	onCancel: () => void;
 	isGenerating: boolean;
-	generateDisabled?: boolean;
-	generateDisabledReason?: string;
 }
 
 export function ChatDrawer({
 	onSendFeedback,
 	onConfirm,
-	onGenerate,
 	onCancel,
 	isGenerating,
-	generateDisabled = false,
-	generateDisabledReason,
 }: ChatDrawerProps) {
 	const { isOpen, close } = useChatPanelStore();
 	const { awaitingConfirm, runMode } = useEditorStore(useShallow((s) => ({ awaitingConfirm: s.awaitingConfirm, runMode: s.runMode })));
@@ -50,11 +44,8 @@ export function ChatDrawer({
 				<ChatPanel
 					onSendFeedback={onSendFeedback}
 					onConfirm={onConfirm}
-					onGenerate={onGenerate}
 					onCancel={onCancel}
 					isGenerating={isGenerating}
-					generateDisabled={generateDisabled}
-					generateDisabledReason={generateDisabledReason}
 				/>
 			</div>
 		</div>

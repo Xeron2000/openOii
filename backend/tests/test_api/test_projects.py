@@ -321,6 +321,27 @@ async def test_create_project_accepts_fake_video_provider(async_client):
 
 
 @pytest.mark.asyncio
+async def test_create_project_accepts_modelscope_image_provider(async_client, test_session):
+    res = await async_client.post(
+        "/api/v1/projects",
+        json={
+            "title": "ModelScope Image Project",
+            "image_provider_override": "modelscope",
+        },
+    )
+
+    assert res.status_code == 201
+    data = res.json()
+    assert data["provider_settings"]["image"]["selected_key"] == "modelscope"
+    assert data["provider_settings"]["image"]["resolved_key"] == "modelscope"
+    assert data["provider_settings"]["image"]["valid"] is True
+
+    project = await test_session.get(Project, data["id"])
+    assert project is not None
+    assert project.image_provider_override == "modelscope"
+
+
+@pytest.mark.asyncio
 async def test_create_project_rejects_unknown_provider_keys(async_client):
     res = await async_client.post(
         "/api/v1/projects",

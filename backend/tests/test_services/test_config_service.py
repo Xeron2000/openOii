@@ -204,6 +204,138 @@ async def test_config_service_ensure_initialized_returns_zero_when_env_empty(
 
 
 @pytest.mark.asyncio
+async def test_config_service_persists_default_provider_configs(
+    test_session, monkeypatch, tmp_path
+):
+    monkeypatch.setenv("ENV_FILE", str(tmp_path / "missing.env"))
+    monkeypatch.delenv("TEXT_API_KEY", raising=False)
+    monkeypatch.delenv("VIDEO_API_KEY", raising=False)
+
+    service = ConfigService(test_session)
+    created = await service.ensure_provider_configs_initialized()
+
+    assert created > 0
+    text_provider = await test_session.get(ConfigItem, "TEXT_PROVIDER")
+    text_model = await test_session.get(ConfigItem, "TEXT_MODEL")
+    image_provider = await test_session.get(ConfigItem, "IMAGE_PROVIDER")
+    image_base_url = await test_session.get(ConfigItem, "IMAGE_BASE_URL")
+    image_model = await test_session.get(ConfigItem, "IMAGE_MODEL")
+    image_endpoint = await test_session.get(ConfigItem, "IMAGE_ENDPOINT")
+    enable_i2i = await test_session.get(ConfigItem, "ENABLE_IMAGE_TO_IMAGE")
+    video_provider = await test_session.get(ConfigItem, "VIDEO_PROVIDER")
+    video_model = await test_session.get(ConfigItem, "VIDEO_MODEL")
+    doubao_model = await test_session.get(ConfigItem, "DOUBAO_VIDEO_MODEL")
+    tts_enabled = await test_session.get(ConfigItem, "TTS_ENABLED")
+    bgm_enabled = await test_session.get(ConfigItem, "BGM_ENABLED")
+    database_url = await test_session.get(ConfigItem, "DATABASE_URL")
+
+    assert text_provider is not None
+    assert text_provider.value == "anthropic"
+    assert text_model is not None
+    assert text_model.value == "deepseek-v4-flash"
+    assert image_provider is not None
+    assert image_provider.value == "modelscope"
+    assert image_base_url is not None
+    assert image_base_url.value == "https://api-inference.modelscope.cn"
+    assert image_model is not None
+    assert image_model.value == "Tongyi-MAI/Z-Image-Turbo"
+    assert image_endpoint is not None
+    assert image_endpoint.value == "/v1/images/generations"
+    assert enable_i2i is not None
+    assert enable_i2i.value == "true"
+    assert video_provider is not None
+    assert video_provider.value == "openai"
+    assert video_model is not None
+    assert video_model.value == "video-gen-1"
+    assert doubao_model is not None
+    assert doubao_model.value == "doubao-seedance-1-5-pro-251215"
+    assert tts_enabled is not None
+    assert tts_enabled.value == "true"
+    assert bgm_enabled is not None
+    assert bgm_enabled.value == "true"
+    assert database_url is None
+
+
+@pytest.mark.asyncio
+async def test_config_service_persists_env_provider_configs(
+    test_session, monkeypatch, tmp_path
+):
+    env_path = tmp_path / "provider.env"
+    env_path.write_text(
+        "TEXT_API_KEY=env-text-key\nVIDEO_MODEL=grok-video-3-10s\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ENV_FILE", str(env_path))
+
+    service = ConfigService(test_session)
+    await service.ensure_provider_configs_initialized()
+
+    text_key = await test_session.get(ConfigItem, "TEXT_API_KEY")
+    video_model = await test_session.get(ConfigItem, "VIDEO_MODEL")
+
+    assert text_key is not None
+    assert text_key.value == "env-text-key"
+    assert text_key.is_sensitive is True
+    assert video_model is not None
+    assert video_model.value == "grok-video-3-10s"
+
+
+@pytest.mark.asyncio
+async def test_config_service_persists_modelscope_image_interface_from_env(
+    test_session, monkeypatch, tmp_path
+):
+    env_path = tmp_path / "provider.env"
+    env_path.write_text(
+        "\n".join(
+            [
+                "IMAGE_PROVIDER=modelscope",
+                "IMAGE_BASE_URL=https://api-inference.modelscope.cn",
+                "IMAGE_API_KEY=ms-test-key",
+                "IMAGE_MODEL=Tongyi-MAI/Z-Image-Turbo",
+                "IMAGE_ENDPOINT=/v1/images/generations",
+                "ENABLE_IMAGE_TO_IMAGE=true",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("ENV_FILE", str(env_path))
+
+    service = ConfigService(test_session)
+    await service.ensure_provider_configs_initialized()
+
+    expected_values = {
+        "IMAGE_PROVIDER": ("modelscope", False),
+        "IMAGE_BASE_URL": ("https://api-inference.modelscope.cn", False),
+        "IMAGE_API_KEY": ("ms-test-key", True),
+        "IMAGE_MODEL": ("Tongyi-MAI/Z-Image-Turbo", False),
+        "IMAGE_ENDPOINT": ("/v1/images/generations", False),
+        "ENABLE_IMAGE_TO_IMAGE": ("true", False),
+    }
+    for key, (value, is_sensitive) in expected_values.items():
+        item = await test_session.get(ConfigItem, key)
+        assert item is not None
+        assert item.value == value
+        assert item.is_sensitive is is_sensitive
+
+
+@pytest.mark.asyncio
+async def test_config_service_provider_persistence_keeps_existing_db_values(
+    test_session, monkeypatch, tmp_path
+):
+    env_path = tmp_path / "provider.env"
+    env_path.write_text("VIDEO_MODEL=env-video-model\n", encoding="utf-8")
+    monkeypatch.setenv("ENV_FILE", str(env_path))
+    await create_config_item(test_session, key="VIDEO_MODEL", value="db-video-model")
+
+    service = ConfigService(test_session)
+    await service.ensure_provider_configs_initialized()
+
+    video_model = await test_session.get(ConfigItem, "VIDEO_MODEL")
+    assert video_model is not None
+    assert video_model.value == "db-video-model"
+
+
+@pytest.mark.asyncio
 async def test_config_service_build_settings_overrides_ignores_unknown_keys(test_session):
     await create_config_item(test_session, key="UNKNOWN_KEY", value="value")
 

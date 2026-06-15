@@ -5,6 +5,7 @@ import base64
 import json
 import logging
 import re
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -30,6 +31,13 @@ DATA_IMAGE_URL_RE = re.compile(
     re.IGNORECASE,
 )
 MARKDOWN_IMAGE_TARGET_RE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
+
+FALLBACK_WHITE_PNG_DATA_URL = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMB/ax7rL8AAAAASUVORK5CYII="
+)
+CHAT_REFERENCE_MAX_SIDE = 512
+CHAT_REFERENCE_JPEG_QUALITY = 75
 
 
 class ImageService:
@@ -64,7 +72,66 @@ class ImageService:
 
     def _is_modelscope_api(self) -> bool:
         """检测是否是 ModelScope API"""
-        return "modelscope" in self.settings.image_base_url.lower()
+        return (
+            self.settings.image_provider.lower() == "modelscope"
+            or "modelscope" in self.settings.image_base_url.lower()
+        )
+
+    def _modelscope_requires_image_url(self) -> bool:
+        model = (self.settings.image_model or "").lower()
+        return "edit" in model or "image-edit" in model
+
+    def _guess_image_content_type(self, image_bytes: bytes) -> str:
+        content_type = "image/png"
+        if image_bytes.startswith(b"\xff\xd8\xff"):
+            content_type = "image/jpeg"
+        elif image_bytes.startswith(b"RIFF") and b"WEBP" in image_bytes[:16]:
+            content_type = "image/webp"
+        elif image_bytes.startswith(b"GIF8"):
+            content_type = "image/gif"
+        return content_type
+
+    def _compress_chat_reference_image(self, image_bytes: bytes) -> tuple[bytes, str]:
+        """Compress multimodal chat image references to avoid small request limits."""
+        try:
+            from PIL import Image
+
+            image = Image.open(BytesIO(image_bytes)).convert("RGB")
+            image.thumbnail(
+                (CHAT_REFERENCE_MAX_SIDE, CHAT_REFERENCE_MAX_SIDE),
+                Image.Resampling.LANCZOS,
+            )
+            buffer = BytesIO()
+            image.save(
+                buffer,
+                format="JPEG",
+                quality=CHAT_REFERENCE_JPEG_QUALITY,
+                optimize=True,
+            )
+            return buffer.getvalue(), "image/jpeg"
+        except Exception:
+            logger.warning("Failed to compress chat image reference; using original bytes")
+            return image_bytes, self._guess_image_content_type(image_bytes)
+
+    def _image_bytes_to_data_url(self, image_bytes: bytes, *, optimize_for_chat: bool = False) -> str:
+        if optimize_for_chat:
+            image_bytes, content_type = self._compress_chat_reference_image(image_bytes)
+        else:
+            content_type = self._guess_image_content_type(image_bytes)
+        encoded = base64.b64encode(image_bytes).decode("ascii")
+        return f"data:{content_type};base64,{encoded}"
+
+    def _blank_canvas_data_url(self, size: int = 1024) -> str:
+        try:
+            from PIL import Image
+
+            image = Image.new("RGB", (size, size), "white")
+            buffer = BytesIO()
+            image.save(buffer, format="PNG")
+            return self._image_bytes_to_data_url(buffer.getvalue())
+        except Exception:
+            logger.warning("Failed to build blank canvas image; using tiny fallback", exc_info=True)
+            return FALLBACK_WHITE_PNG_DATA_URL
 
     def _sanitize_url(self, url: str) -> str:
         cleaned = url.strip().strip("\"'")
@@ -114,6 +181,22 @@ class ImageService:
 
         return None
 
+    def _extract_url_from_chat_content(self, content: Any) -> str | None:
+        if isinstance(content, str):
+            return self._extract_url_from_text(content)
+        if isinstance(content, list):
+            for part in content:
+                extracted = self._extract_url_from_payload(part)
+                if extracted:
+                    return extracted
+                if isinstance(part, dict):
+                    text = part.get("text")
+                    if isinstance(text, str):
+                        extracted = self._extract_url_from_text(text)
+                        if extracted:
+                            return extracted
+        return None
+
     def _extract_url_from_payload(self, payload: Any) -> str | None:
         if isinstance(payload, str):
             return self._extract_url_from_text(payload)
@@ -123,6 +206,18 @@ class ImageService:
         direct = self._extract_url_from_payload_item(payload)
         if direct:
             return direct
+
+        choices = payload.get("choices")
+        if isinstance(choices, list):
+            for choice in choices:
+                if not isinstance(choice, dict):
+                    continue
+                for key in ("message", "delta"):
+                    node = choice.get(key)
+                    if isinstance(node, dict):
+                        extracted = self._extract_url_from_chat_content(node.get("content"))
+                        if extracted:
+                            return extracted
 
         for key in ("data", "images", "output_images", "outputs"):
             value = payload.get(key)
@@ -225,14 +320,14 @@ class ImageService:
                         logger.debug(f"Response headers: {headers}")
 
                         if status != 200:
-                            body = response.read().decode('utf-8', errors='ignore')
+                            body = response.read().decode("utf-8", errors="ignore")
                             logger.error(f"Failed to download image. Status: {status}")
                             logger.error(f"Response body: {body[:500]}")
                             raise RuntimeError(f"Failed to download image (HTTP {status})")
 
                         # 检查内容类型
-                        content_type = headers.get('Content-Type', '')
-                        if not content_type.startswith('image/'):
+                        content_type = headers.get("Content-Type", "")
+                        if not content_type.startswith("image/"):
                             logger.warning(f"Unexpected content type: {content_type}")
 
                         # 读取内容
@@ -241,7 +336,7 @@ class ImageService:
 
                 except HTTPError as e:
                     logger.error(f"HTTP error: {e.code} {e.reason}")
-                    body = e.read().decode('utf-8', errors='ignore')
+                    body = e.read().decode("utf-8", errors="ignore")
                     logger.error(f"Response body: {body[:500]}")
                     raise RuntimeError(f"Failed to download image (HTTP {e.code})") from e
                 except URLError as e:
@@ -263,9 +358,13 @@ class ImageService:
             logger.error(f"Unexpected error downloading image: {e}", exc_info=True)
             raise RuntimeError(f"Failed to download image: {str(e)[:100]}") from e
 
-    async def _modelscope_generate(self, prompt: str) -> str:
+    async def _modelscope_generate(self, prompt: str, image_bytes: bytes | None = None) -> str:
         """ModelScope 异步图片生成"""
+        if not self.settings.image_api_key:
+            raise RuntimeError("IMAGE_API_KEY is required for ModelScope image generation")
+
         base_url = self.settings.image_base_url.rstrip("/")
+        submit_url = self._build_url()
         headers = {
             "Authorization": f"Bearer {self.settings.image_api_key}",
             "Content-Type": "application/json",
@@ -280,9 +379,14 @@ class ImageService:
                 "model": self.settings.image_model,
                 "prompt": prompt,
             }
+            requires_image_url = self._modelscope_requires_image_url()
+            if image_bytes is not None and requires_image_url:
+                payload["image_url"] = self._image_bytes_to_data_url(image_bytes)
+            elif requires_image_url:
+                payload["image_url"] = self._blank_canvas_data_url()
 
             res = await client.post(
-                f"{base_url}/v1/images/generations",
+                submit_url,
                 headers=headers,
                 json=payload,
             )
@@ -329,7 +433,9 @@ class ImageService:
         async with httpx.AsyncClient(timeout=self.settings.request_timeout_s) as client:
             for attempt in range(self.max_retries + 1):
                 try:
-                    res = await client.post(url, headers=self.settings.image_headers(), json=payload)
+                    res = await client.post(
+                        url, headers=self.settings.image_headers(), json=payload
+                    )
                     if self._is_retryable_status(res.status_code) and attempt < self.max_retries:
                         await asyncio.sleep(delay_s)
                         delay_s = min(delay_s * 2, 8.0)
@@ -346,7 +452,9 @@ class ImageService:
                     await asyncio.sleep(delay_s)
                     delay_s = min(delay_s * 2, 8.0)
 
-        raise RuntimeError(f"Image generation request failed after retries: {last_exc}") from last_exc
+        raise RuntimeError(
+            f"Image generation request failed after retries: {last_exc}"
+        ) from last_exc
 
     async def _post_stream_with_retry(self, url: str, payload: dict[str, Any]) -> str:
         """流式请求，收集所有 chunk 并提取最终 URL"""
@@ -362,7 +470,10 @@ class ImageService:
                     async with client.stream(
                         "POST", url, headers=self.settings.image_headers(), json=payload
                     ) as res:
-                        if self._is_retryable_status(res.status_code) and attempt < self.max_retries:
+                        if (
+                            self._is_retryable_status(res.status_code)
+                            and attempt < self.max_retries
+                        ):
                             await asyncio.sleep(delay_s)
                             delay_s = min(delay_s * 2, 8.0)
                             continue
@@ -381,6 +492,7 @@ class ImageService:
                                 extracted = self._extract_url_from_payload(chunk)
                                 if extracted:
                                     collected_content += extracted
+                                    continue
                                 choices = chunk.get("choices", [])
                                 if choices:
                                     delta = choices[0].get("delta", {})
@@ -397,7 +509,9 @@ class ImageService:
                                         err = json.loads(data_str)
                                         raise RuntimeError(f"Stream error: {err}")
                                     except json.JSONDecodeError:
-                                        logger.debug("Non-JSON error line in stream: %s", data_str[:100])
+                                        logger.debug(
+                                            "Non-JSON error line in stream: %s", data_str[:100]
+                                        )
                                 else:
                                     logger.debug("Skipping non-JSON line in image stream: %s", e)
                                 continue
@@ -414,7 +528,9 @@ class ImageService:
                     await asyncio.sleep(delay_s)
                     delay_s = min(delay_s * 2, 8.0)
 
-        raise RuntimeError(f"Image generation stream failed after retries: {last_exc}") from last_exc
+        raise RuntimeError(
+            f"Image generation stream failed after retries: {last_exc}"
+        ) from last_exc
 
     async def generate(
         self,
@@ -427,6 +543,10 @@ class ImageService:
         stream: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        if self._is_modelscope_api():
+            url = await self._modelscope_generate(prompt)
+            return {"data": [{"url": url}]}
+
         url = self._build_url()
 
         if "/chat/completions" in self.settings.image_endpoint:
@@ -460,11 +580,7 @@ class ImageService:
     ) -> str:
         # ModelScope API（异步轮询模式）
         if self._is_modelscope_api():
-            if image_bytes is not None:
-                logger.info(
-                    "I2I reference image provided but ModelScope backend does not support it; falling back to text-to-image"
-                )
-            return await self._modelscope_generate(prompt)
+            return await self._modelscope_generate(prompt, image_bytes=image_bytes)
 
         url = self._build_url()
 
@@ -484,7 +600,12 @@ class ImageService:
                                     {"type": "text", "text": prompt},
                                     {
                                         "type": "image_url",
-                                        "image_url": {"url": f"data:image/png;base64,{image_base64}"},
+                                        "image_url": {
+                                            "url": self._image_bytes_to_data_url(
+                                                image_bytes,
+                                                optimize_for_chat=True,
+                                            )
+                                        },
                                     },
                                 ],
                             }

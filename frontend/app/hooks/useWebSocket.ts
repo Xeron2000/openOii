@@ -1,6 +1,5 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useEditorStore, type RunMode } from "~/stores/editorStore";
-import { getStaticUrl } from "~/services/api";
 import type {
 	AgentMessage,
 	AgentThinkingEventData,
@@ -18,6 +17,7 @@ import type {
 	RunProgressEventData,
 	RunStartedEventData,
 	Shot,
+	ShotsReorderedEventData,
 	WsEvent,
 } from "~/types";
 import { toast } from "~/utils/toast";
@@ -499,6 +499,16 @@ export function applyWsEvent(
 			}
 			break;
 
+		case "shots_reordered": {
+			const data = event.data as unknown as ShotsReorderedEventData;
+			if (Array.isArray(data.shots)) {
+				store.setShots(
+					[...data.shots].sort((a, b) => a.order - b.order || a.id - b.id),
+				);
+			}
+			break;
+		}
+
 		case "character_deleted": {
 			const charId = event.data.character_id as number | undefined;
 			if (charId !== undefined) {
@@ -638,26 +648,8 @@ export function applyWsEvent(
 
 		case "export_completed": {
 			const exportData = event.data as unknown as import("~/types").ExportCompletedEventData;
-			const formatLabel = exportData.format === "pdf" ? "PDF 漫画册" : "Webtoon 长图";
-			if (exportData.status === "completed" && exportData.download_url) {
-				const url = getStaticUrl(exportData.download_url);
-				toast.success({
-					title: "导出完成",
-					message: `${formatLabel}已生成`,
-					duration: 8000,
-					actions: url
-						? [
-							{
-								label: "下载",
-								onClick: () => {
-									window.open(url, "_blank");
-								},
-								variant: "primary" as const,
-							},
-						  ]
-						: undefined,
-				});
-			} else if (exportData.status === "failed") {
+			const formatLabel = exportData.format === "webtoon" ? "Webtoon 长图" : "导出文件";
+			if (exportData.status === "failed") {
 				toast.error({
 					title: "导出失败",
 					message: `${formatLabel}生成失败${exportData.error ? `: ${exportData.error}` : ""}`,

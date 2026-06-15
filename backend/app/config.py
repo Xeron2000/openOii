@@ -81,27 +81,27 @@ class Settings(BaseSettings):
     )
 
     # ============================================
-    # 图像生成服务 (OpenAI 兼容接口)
+    # 图像生成服务
     # ============================================
     image_provider: str = Field(
-        default="openai",
-        description="图像生成服务提供商：openai 或 fake（本地开发/测试，不调用外部 API）",
+        default="modelscope",
+        description="图像生成服务提供商：modelscope、openai 或 fake（本地开发/测试，不调用外部 API）",
     )
     image_base_url: str = Field(
-        default="https://api.openai.com/v1",
+        default="https://api-inference.modelscope.cn",
         description="图像生成服务基础地址",
     )
     image_api_key: str | None = None
     image_model: str = Field(
-        default="dall-e-3",
+        default="Tongyi-MAI/Z-Image-Turbo",
         description="图像生成模型名称",
     )
     image_endpoint: str = Field(
-        default="/images/generations",
+        default="/v1/images/generations",
         description="图像生成 API 端点路径",
     )
     enable_image_to_image: bool = Field(
-        default=False,
+        default=True,
         description="是否启用图生图（分镜首帧 I2I 参考图）",
     )
     fake_image_fixture_url: str | None = Field(

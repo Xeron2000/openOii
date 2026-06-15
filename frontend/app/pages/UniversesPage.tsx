@@ -63,7 +63,7 @@ export function UniversesPage() {
 						← 返回首页
 					</Link>
 				</div>
-				<div className="font-comic text-lg text-primary font-bold tracking-wider">
+				<div className="font-comic text-lg text-base-content font-bold tracking-wider">
 					<span className="inline-flex items-center gap-2">
 						<GlobeAltIcon className="w-5 h-5" aria-hidden="true" />
 						IP 宇宙
@@ -79,7 +79,7 @@ export function UniversesPage() {
 						<h1 className="text-3xl font-heading font-bold underline-sketch">
 							IP 宇宙
 						</h1>
-						<p className="text-sm text-base-content/50 mt-1">
+						<p className="text-sm text-base-content/70 mt-1">
 							管理跨项目的共享世界观和角色库
 						</p>
 					</div>
@@ -100,13 +100,13 @@ export function UniversesPage() {
 				{!isLoading && universes.length === 0 && (
 					<Card className="text-center py-16">
 						<GlobeAltIcon
-							className="w-16 h-16 mx-auto mb-4 text-primary/50"
+							className="w-16 h-16 mx-auto mb-4 text-primary/70"
 							aria-hidden="true"
 						/>
 						<h2 className="text-xl font-heading font-bold mb-2">
 							还没有 IP 宇宙
 						</h2>
-						<p className="text-sm text-base-content/50 mb-6">
+						<p className="text-sm text-base-content/70 mb-6">
 							创建你的第一个 IP 宇宙，开始构建跨项目的故事世界
 						</p>
 						<Button onClick={() => setShowCreate(true)}>
@@ -136,6 +136,7 @@ export function UniversesPage() {
 					<div className="space-y-4">
 						<Input
 							label="宇宙名称"
+							name="universe-name"
 							placeholder="如：赛博修仙录"
 							value={createForm.name}
 							onChange={(e) =>
@@ -144,8 +145,12 @@ export function UniversesPage() {
 						/>
 
 						<div>
-							<label className="label text-xs font-bold">简介</label>
+							<label htmlFor="universe-description" className="label text-xs font-bold">
+								简介
+							</label>
 							<textarea
+								id="universe-description"
+								name="universe-description"
 								className="textarea textarea-bordered bg-base-200 w-full h-20 text-sm"
 								placeholder="宇宙的简要描述..."
 								value={createForm.description}
@@ -156,8 +161,12 @@ export function UniversesPage() {
 						</div>
 
 						<div>
-							<label className="label text-xs font-bold">世界观设定</label>
+							<label htmlFor="universe-world-setting" className="label text-xs font-bold">
+								世界观设定
+							</label>
 							<textarea
+								id="universe-world-setting"
+								name="universe-world-setting"
 								className="textarea textarea-bordered bg-base-200 w-full h-24 text-sm"
 								placeholder="统一的世界观设定，所有章节必须遵循..."
 								value={createForm.world_setting}
@@ -168,8 +177,12 @@ export function UniversesPage() {
 						</div>
 
 						<div>
-							<label className="label text-xs font-bold">统一风格规则</label>
+							<label htmlFor="universe-style-rules" className="label text-xs font-bold">
+								统一风格规则
+							</label>
 							<textarea
+								id="universe-style-rules"
+								name="universe-style-rules"
 								className="textarea textarea-bordered bg-base-200 w-full h-16 text-sm"
 								placeholder="角色设计、场景风格等统一规则..."
 								value={createForm.style_rules}

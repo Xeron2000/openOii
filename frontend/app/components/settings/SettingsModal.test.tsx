@@ -280,6 +280,114 @@ describe("SettingsModal", () => {
 		});
 	});
 
+	it("支持 ModelScope 图像 provider 并显示持久化配置项", async () => {
+		const user = userEvent.setup();
+		const imageConfig: ConfigItem[] = [
+			{
+				key: "IMAGE_PROVIDER",
+				value: "modelscope",
+				is_sensitive: false,
+				is_masked: false,
+				source: "db",
+			},
+			{
+				key: "IMAGE_BASE_URL",
+				value: "https://api-inference.modelscope.cn",
+				is_sensitive: false,
+				is_masked: false,
+				source: "db",
+			},
+			{
+				key: "IMAGE_API_KEY",
+				value: "ms-******demo",
+				is_sensitive: true,
+				is_masked: true,
+				source: "db",
+			},
+			{
+				key: "IMAGE_MODEL",
+				value: "Tongyi-MAI/Z-Image-Turbo",
+				is_sensitive: false,
+				is_masked: false,
+				source: "db",
+			},
+			{
+				key: "IMAGE_ENDPOINT",
+				value: "/v1/images/generations",
+				is_sensitive: false,
+				is_masked: false,
+				source: "db",
+			},
+		];
+
+		vi.mocked(configApi.get).mockResolvedValue(imageConfig as never);
+		renderComponent();
+
+		const imageTab = await screen.findByRole("tab", { name: /图像服务/ });
+		await user.click(imageTab);
+
+		await waitFor(() => {
+			expect(screen.getByRole("radio", { name: /ModelScope/ })).toBeChecked();
+			expect(screen.getByText("ModelScope 图像接口配置")).toBeInTheDocument();
+			expect(
+				screen.getByDisplayValue("Tongyi-MAI/Z-Image-Turbo"),
+			).toBeInTheDocument();
+			expect(
+				screen.getByDisplayValue("https://api-inference.modelscope.cn"),
+			).toBeInTheDocument();
+		});
+	});
+
+	it("支持 gpt-image-2 OpenAI 兼容图像接口配置", async () => {
+		const user = userEvent.setup();
+		const imageConfig: ConfigItem[] = [
+			{
+				key: "IMAGE_PROVIDER",
+				value: "openai",
+				is_sensitive: false,
+				is_masked: false,
+				source: "db",
+			},
+			{
+				key: "IMAGE_BASE_URL",
+				value: "https://image.6668.dpdns.org/v1",
+				is_sensitive: false,
+				is_masked: false,
+				source: "db",
+			},
+			{
+				key: "IMAGE_MODEL",
+				value: "gpt-image-2",
+				is_sensitive: false,
+				is_masked: false,
+				source: "db",
+			},
+			{
+				key: "IMAGE_ENDPOINT",
+				value: "/chat/completions",
+				is_sensitive: false,
+				is_masked: false,
+				source: "db",
+			},
+		];
+
+		vi.mocked(configApi.get).mockResolvedValue(imageConfig as never);
+		renderComponent();
+
+		const imageTab = await screen.findByRole("tab", { name: /图像服务/ });
+		await user.click(imageTab);
+
+		await waitFor(() => {
+			expect(screen.getByRole("radio", { name: /OpenAI 兼容/ })).toBeChecked();
+			expect(screen.getByText("OpenAI 兼容接口配置")).toBeInTheDocument();
+			expect(screen.getByDisplayValue("gpt-image-2")).toBeInTheDocument();
+			expect(
+				screen.getByDisplayValue("https://image.6668.dpdns.org/v1"),
+			).toBeInTheDocument();
+			expect(screen.getByDisplayValue("/chat/completions")).toBeInTheDocument();
+		});
+	});
+
 	it("切换标签页并保持输入值", async () => {
 		const user = userEvent.setup();
 		renderComponent();
@@ -500,9 +608,9 @@ describe("SettingsModal", () => {
 		// 验证 API 调用
 		await waitFor(() => {
 			expect(configApi.update).toHaveBeenCalledWith(
-				expect.objectContaining({
+				{
 					REDIS_URL: "redis://newhost:6379/1",
-				}),
+				},
 			);
 		});
 
@@ -511,6 +619,25 @@ describe("SettingsModal", () => {
 			expect(screen.getByText("保存成功")).toBeInTheDocument();
 			expect(screen.getByText("配置已保存并立即生效！")).toBeInTheDocument();
 		});
+	});
+
+	it("没有配置变更时不提交更新请求", async () => {
+		const user = userEvent.setup();
+		renderComponent();
+
+		await waitFor(() => {
+			expect(
+				screen.getByDisplayValue("redis://localhost:6379/0"),
+			).toBeInTheDocument();
+		});
+
+		const saveButton = screen.getByRole("button", { name: /保存/i });
+		await user.click(saveButton);
+
+		await waitFor(() => {
+			expect(screen.getByText("没有变更")).toBeInTheDocument();
+		});
+		expect(configApi.update).not.toHaveBeenCalled();
 	});
 
 	it("提交配置更新 - 需要重启场景", async () => {

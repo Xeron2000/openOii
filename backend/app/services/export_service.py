@@ -365,6 +365,9 @@ class ExportService:
         Returns:
             导出文件的本地 URL（如 /static/exports/xxx.png）
         """
+        if not shots:
+            raise ValueError("没有可导出的分镜，请先生成分镜内容")
+
         EXPORTS_DIR.mkdir(parents=True, exist_ok=True)
 
         export_id = uuid.uuid4().hex[:12]

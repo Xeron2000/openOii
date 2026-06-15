@@ -1,13 +1,9 @@
-import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { universesApi, projectsApi } from "~/services/api";
+import { universesApi } from "~/services/api";
 import { SharedCharacterCard } from "~/components/universe/SharedCharacterCard";
-import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
-import { Modal } from "~/components/ui/Modal";
 import {
-	ArrowLeftIcon,
 	PlusIcon,
 	BookOpenIcon,
 	TrashIcon,
@@ -16,46 +12,17 @@ import {
 	UserGroupIcon,
 } from "@heroicons/react/24/outline";
 import { toast } from "~/utils/toast";
-import type { UniverseDetail, Project } from "~/types";
+import type { UniverseDetail } from "~/types";
 
 export function UniverseDetailPage() {
 	const { universeId } = useParams<{ universeId: string }>();
 	const queryClient = useQueryClient();
 	const id = Number(universeId);
 
-	const [showAddProject, setShowAddProject] = useState(false);
-
 	const { data: universe, isLoading } = useQuery({
 		queryKey: ["universe", id],
 		queryFn: () => universesApi.get(id),
 		enabled: !isNaN(id),
-	});
-
-	const { data: projectsData } = useQuery({
-		queryKey: ["projects"],
-		queryFn: () => projectsApi.list(),
-	});
-
-	const addProjectMutation = useMutation({
-		mutationFn: ({
-			projectId,
-			chapterNumber,
-			chapterTitle,
-		}: {
-			projectId: number;
-			chapterNumber?: number;
-			chapterTitle?: string;
-		}) =>
-			universesApi.addProject(id, projectId, chapterNumber, chapterTitle),
-		onSuccess: () => {
-			queryClient.invalidateQueries({ queryKey: ["universe", id] });
-			queryClient.invalidateQueries({ queryKey: ["universes"] });
-			setShowAddProject(false);
-			toast.success({ title: "已添加", message: "项目已加入宇宙" });
-		},
-		onError: (error: Error) => {
-			toast.error({ title: "添加失败", message: error.message });
-		},
 	});
 
 	const removeProjectMutation = useMutation({
@@ -85,11 +52,11 @@ export function UniverseDetailPage() {
 	}
 
 	const u = universe as UniverseDetail;
-	const allProjects = projectsData ?? [];
-	const existingProjectIds = new Set(u.chapters.map((c) => c.project_id));
-	const availableProjects = allProjects.filter(
-		(p: Project) => !existingProjectIds.has(p.id),
-	);
+	const nextChapterNumber =
+		u.chapters.length > 0
+			? Math.max(...u.chapters.map((chapter) => chapter.chapter_number ?? 0)) + 1
+			: 1;
+	const createChapterHref = `/?universeId=${u.id}&chapterNumber=${nextChapterNumber}`;
 
 	return (
 		<div className="min-h-screen bg-base-100 font-sans">
@@ -103,15 +70,6 @@ export function UniverseDetailPage() {
 			</header>
 
 			<main className="container mx-auto px-4 py-8 max-w-6xl">
-				{/* Back */}
-				<Link
-					to="/universes"
-					className="btn btn-ghost btn-sm mb-4 inline-flex items-center gap-1"
-				>
-					<ArrowLeftIcon className="w-4 h-4" />
-					返回宇宙列表
-				</Link>
-
 				{/* Header */}
 				<div className="mb-8">
 					<h1 className="text-3xl font-heading font-bold underline-sketch">
@@ -155,19 +113,22 @@ export function UniverseDetailPage() {
 							<BookOpenIcon className="w-5 h-5" />
 							章节列表
 						</h2>
-						<Button size="sm" onClick={() => setShowAddProject(true)}>
+						<Link
+							to={createChapterHref}
+							className="btn-doodle touch-target inline-flex items-center justify-center gap-1 bg-primary px-3 py-1.5 font-heading text-sm text-primary-content hover:bg-primary/90"
+						>
 							<PlusIcon className="w-3.5 h-3.5 mr-1" />
-							添加项目
-						</Button>
+							新建章节
+						</Link>
 					</div>
 
 					{u.chapters.length === 0 ? (
 						<p className="text-sm text-base-content/40 text-center py-8">
-							还没有章节，点击"添加项目"开始
+							还没有章节，从这里新建第一个工作区。
 						</p>
 					) : (
 						<div className="space-y-2">
-							{u.chapters
+							{[...u.chapters]
 								.sort((a, b) =>
 									(a.chapter_number ?? 999) - (b.chapter_number ?? 999),
 								)
@@ -193,6 +154,8 @@ export function UniverseDetailPage() {
 										<button
 											type="button"
 											className="btn btn-ghost btn-xs text-error/50 hover:text-error"
+											aria-label={`从宇宙移除${ch.chapter_title || ch.project_title || "未命名项目"}`}
+											title="从宇宙移除"
 											onClick={() => removeProjectMutation.mutate(ch.project_id)}
 										>
 											<TrashIcon className="w-3.5 h-3.5" />
@@ -223,58 +186,6 @@ export function UniverseDetailPage() {
 					)}
 				</Card>
 			</main>
-
-			{/* Add Project Modal */}
-			{showAddProject && (
-				<Modal
-					isOpen={showAddProject}
-					onClose={() => setShowAddProject(false)}
-					title="添加项目到宇宙"
-				>
-					{availableProjects.length === 0 ? (
-						<p className="text-sm text-base-content/50 text-center py-6">
-							没有可添加的项目（所有项目已在本宇宙中）
-						</p>
-					) : (
-						<div className="space-y-2 max-h-96 overflow-y-auto">
-							{availableProjects.map((p: Project) => (
-								<button
-									key={p.id}
-									type="button"
-									className="w-full text-left p-3 rounded-lg bg-base-200/50 hover:bg-base-200 transition-colors flex items-center justify-between"
-									onClick={() => {
-										const nextChapter =
-											u.chapters.length > 0
-												? Math.max(...u.chapters.map((c) => c.chapter_number ?? 0)) + 1
-												: 1;
-										addProjectMutation.mutate({
-											projectId: p.id,
-											chapterNumber: nextChapter,
-											chapterTitle: p.title,
-										});
-									}}
-								>
-									<div>
-										<span className="font-heading font-bold text-sm">
-											{p.title}
-										</span>
-										<span className="text-xs text-base-content/40 ml-2">
-											{p.status}
-										</span>
-									</div>
-									<PlusIcon className="w-4 h-4 text-primary" />
-								</button>
-							))}
-						</div>
-					)}
-
-					<div className="flex justify-end pt-4">
-						<Button variant="ghost" onClick={() => setShowAddProject(false)}>
-							关闭
-						</Button>
-					</div>
-				</Modal>
-			)}
 		</div>
 	);
 }

@@ -30,6 +30,7 @@ from app.schemas.ws import (
     RunStartedEventData,
     ShotCreatedEventData,
     ShotDeletedEventData,
+    ShotsReorderedEventData,
     ShotUpdatedEventData,
     VersionCreatedEventData,
     VersionRollbackEventData,
@@ -144,6 +145,7 @@ class TestWsEventSchemaRegistry:
             ("character_deleted", CharacterDeletedEventData),
             ("shot_created", ShotCreatedEventData),
             ("shot_updated", ShotUpdatedEventData),
+            ("shots_reordered", ShotsReorderedEventData),
             ("shot_deleted", ShotDeletedEventData),
             ("outline_updated", OutlineUpdatedEventData),
             ("project_updated", ProjectUpdatedEventData),
@@ -407,6 +409,15 @@ class TestShotCreatedEventData:
     def test_valid(self):
         d = ShotCreatedEventData.model_validate({"shot": SHOT_DATA})
         assert d.shot.order == 1
+
+
+class TestShotsReorderedEventData:
+    def test_valid(self):
+        d = ShotsReorderedEventData.model_validate(
+            {"project_id": 1, "shots": [SHOT_DATA, {**SHOT_DATA, "id": 2, "order": 2}]}
+        )
+        assert d.project_id == 1
+        assert [shot.order for shot in d.shots] == [1, 2]
 
 
 class TestShotDeletedEventData:

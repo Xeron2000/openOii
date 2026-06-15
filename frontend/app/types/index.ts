@@ -20,10 +20,14 @@ export interface ProjectProviderSettings {
 	video: ProjectProviderEntry;
 }
 
+export type TextProviderKey = "anthropic" | "openai" | "fake";
+export type ImageProviderKey = "modelscope" | "openai" | "fake";
+export type VideoProviderKey = "openai" | "doubao" | "fake";
+
 export interface ProjectProviderOverridesPayload {
-	text_provider_override?: string | null;
-	image_provider_override?: string | null;
-	video_provider_override?: string | null;
+	text_provider_override?: TextProviderKey | null;
+	image_provider_override?: ImageProviderKey | null;
+	video_provider_override?: VideoProviderKey | null;
 }
 
 export interface CreateProjectPayload extends ProjectProviderOverridesPayload {
@@ -197,6 +201,15 @@ export interface ShotUpdatePayload {
 	sfx?: string | null;
 	seed?: number | null;
 	character_ids?: number[] | null;
+}
+
+export interface ShotReorderItem {
+	shot_id: number;
+	order: number;
+}
+
+export interface ShotReorderResponse {
+	shots: Shot[];
 }
 
 export type VersionEntityType = "character" | "shot";
@@ -397,6 +410,7 @@ export type WsEventType =
 	| "character_deleted"
 	| "shot_created"
 	| "shot_updated"
+	| "shots_reordered"
 	| "shot_deleted"
 	| "outline_updated"
 	| "project_updated"
@@ -412,6 +426,11 @@ export type WsEventType =
 export interface WsEvent {
 	type: WsEventType;
 	data: Record<string, unknown>;
+}
+
+export interface ShotsReorderedEventData {
+	project_id: number;
+	shots: Shot[];
 }
 
 export interface OutlineUpdatedEventData {

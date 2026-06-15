@@ -196,7 +196,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openChatPanel(page: Page) {
-	await page.locator('button[title="对话面板"]').first().click();
+	await page.locator("aside").getByRole("button", { name: "对话" }).click();
 }
 
 test("canvas progressively reveals sections following 3-stage plan→render→compose pipeline", async ({
@@ -246,7 +246,6 @@ test("canvas progressively reveals sections following 3-stage plan→render→co
 
 	await expect(page.getByText("确认继续？")).toBeVisible();
 	await expect(page.getByRole("button", { name: "通过" })).toBeVisible();
-	await expect(page.getByText("待确认")).toBeVisible();
 
 	await page.evaluate(() => {
 		window.__mockWs.dispatch({
@@ -360,6 +359,7 @@ test("full business flow: generate → plan → confirm → render → confirm �
 			approved_image_url: "http://img/cat.png",
 			approval_version: 1,
 			approved_at: "2026-05-05T01:00:00Z",
+			approval_state: "approved",
 		},
 	];
 
@@ -383,6 +383,22 @@ test("full business flow: generate → plan → confirm → render → confirm �
 			project_id: 7,
 			approval_version: 1,
 			approved_at: "2026-05-05T02:00:00Z",
+			seed: null,
+			character_ids: [1],
+			approval_state: "approved",
+			approved_description: "小猫推开门",
+			approved_prompt: "A cat pushes open a temple door",
+			approved_image_prompt: "Orange cat pushing door, moonlight",
+			approved_duration: 5.0,
+			approved_camera: "中景→推近",
+			approved_motion_note: null,
+			approved_scene: "古寺大殿",
+			approved_action: "缓步推门",
+			approved_expression: "警惕凝视",
+			approved_lighting: "月光从窗棂斜入",
+			approved_dialogue: "这扇门...不该开着",
+			approved_sfx: "风铃轻响",
+			approved_character_ids: [1],
 		},
 	];
 

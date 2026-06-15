@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 TextProviderKey = Literal["anthropic", "openai", "fake"]
-ImageProviderKey = Literal["openai", "fake"]
+ImageProviderKey = Literal["modelscope", "openai", "fake"]
 VideoProviderKey = Literal["openai", "doubao", "fake"]
 
 
@@ -246,6 +246,19 @@ class ShotUpdate(BaseModel):
     sfx: str | None = None
     seed: int | None = None
     character_ids: list[int] | None = None
+
+
+class ShotReorderItem(BaseModel):
+    shot_id: int = Field(ge=1)
+    order: int = Field(ge=1)
+
+
+class ShotReorderRequest(BaseModel):
+    items: list[ShotReorderItem] = Field(min_length=1)
+
+
+class ShotReorderRead(BaseModel):
+    shots: list[ShotRead]
 
 
 class CharacterUpdate(BaseModel):

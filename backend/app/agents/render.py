@@ -4,12 +4,10 @@ import asyncio
 import logging
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.base import AgentContext, BaseAgent, CompletionInfo
 from app.agents.utils import build_character_context
 from app.models.project import Character, Shot
-from app.models.style_template import StyleTemplate
 from app.services.character_bible import (
     auto_populate_visual_notes,
     build_character_bible,
@@ -17,6 +15,13 @@ from app.services.character_bible import (
 )
 from app.services.image_composer import ImageComposer
 from app.services.shot_binding import resolve_shot_bound_approved_characters
+from app.services.style_prompts import (
+    BUILTIN_STYLE_PROMPTS,
+    CHARACTER_IDENTITY_LOCK,
+    SHOT_CONTINUITY_LOCK,
+    resolve_style_prompt,
+    resolve_style_prompt_sync,
+)
 from app.services.version_service import VersionService, character_snapshot, shot_snapshot
 
 logger = logging.getLogger(__name__)
@@ -30,63 +35,35 @@ class RenderAgent(BaseAgent):
         self.image_composer = ImageComposer()
         self.version_service = VersionService()
 
-    # Hardcoded fallback mapping used when no StyleTemplate row exists
-    _FALLBACK_STYLE_MAP = {
-        "anime": "anime, 2D illustration, cel-shading, vibrant colors, Japanese animation style",
-        "shonen": "anime, shonen style, high contrast, dynamic composition, dramatic lighting, bold lines",
-        "slice-of-life": "anime, slice of life, soft pastel colors, warm lighting, rounded lines, cozy atmosphere",
-        "manga": "manga style, black and white, halftone dots, speed lines, high contrast ink",
-        "donghua": "Chinese animation, ink wash, flowing lines, oriental color palette, watercolor textures",
-        "cinematic": "cinematic, photorealistic, 35mm film grain, natural lighting, shallow depth of field",
-        "pixar": "3D cartoon, Pixar-style rendering, smooth surfaces, global illumination, rounded shapes",
-        "lowpoly": "low poly, geometric, faceted surfaces, hard edge lighting, minimalist palette",
-        "watercolor": "watercolor, soft bleeding edges, transparent layering, white space breathing, painterly",
-        "sketch": "pencil sketch, cross-hatching, monochrome shading, rough lines, hand-drawn",
-        "realistic": "photorealistic, natural lighting, detailed textures, real-world proportions",
-    }
-
-    async def _lookup_style_template(self, session: "AsyncSession", style: str) -> StyleTemplate | None:
-        """Look up a StyleTemplate by slug from the database."""
-        res = await session.execute(
-            select(StyleTemplate).where(
-                StyleTemplate.slug == style,
-                StyleTemplate.is_active.is_(True),
-            )
-        )
-        return res.scalar_one_or_none()
+    _FALLBACK_STYLE_MAP = BUILTIN_STYLE_PROMPTS
 
     def _style_descriptor(self, style: str) -> str:
         """Synchronous fallback — used when no session is available."""
-        return self._FALLBACK_STYLE_MAP.get(style, self._FALLBACK_STYLE_MAP.get("anime"))
+        return resolve_style_prompt_sync(style).style_prompt
 
-    async def _style_descriptor_async(self, session: "AsyncSession", style: str) -> tuple[str, str | None]:
+    async def _style_descriptor_async(self, session, style: str) -> tuple[str, str | None]:
         """Look up StyleTemplate from DB and return (style_prompt, negative_prompt).
 
         Falls back to hardcoded mapping if template not found.
         """
-        template = await self._lookup_style_template(session, style)
-        if template:
-            color_part = ", ".join(template.color_palette) if template.color_palette else ""
-            prompt = template.style_prompt
-            if color_part:
-                prompt = f"{prompt}, {color_part}"
-            return prompt, template.negative_prompt
-        # Fallback to hardcoded mapping
-        return self._style_descriptor(style), None
+        resolved = await resolve_style_prompt(session, style)
+        return resolved.style_prompt, resolved.negative_prompt
 
-    async def _build_character_prompt(self, character: Character, *, style: str, session: "AsyncSession") -> str:
+    async def _build_character_prompt(self, character: Character, *, style: str, session) -> str:
         desc = character.description or character.name
         # Inject visual_notes into the prompt if available
         if character.visual_notes:
             desc = f"{desc}, {character.visual_notes}"
         style_desc, negative = await self._style_descriptor_async(session, style)
         face_anchor = "detailed face, clear facial features, sharp eyes"
-        prompt = f"{desc}, {face_anchor}, {style_desc}"
+        prompt = f"{desc}, {CHARACTER_IDENTITY_LOCK}, {face_anchor}, {style_desc}"
         if negative:
             prompt += f" || negative: {negative}"
         return prompt
 
-    async def _build_shot_prompt(self, shot: Shot, characters: list[Character], *, style: str, session: "AsyncSession") -> str:
+    async def _build_shot_prompt(
+        self, shot: Shot, characters: list[Character], *, style: str, session
+    ) -> str:
         desc = shot.image_prompt or shot.description
         parts = [desc.strip()]
         # Inject character bible text for each character
@@ -98,7 +75,7 @@ class RenderAgent(BaseAgent):
         if char_context:
             parts.append(char_context)
         if characters:
-            parts.append("same character face as reference, consistent identity")
+            parts.append(SHOT_CONTINUITY_LOCK)
         style_desc, negative = await self._style_descriptor_async(session, style)
         parts.append(style_desc)
         if negative:
@@ -143,7 +120,9 @@ class RenderAgent(BaseAgent):
                     current=i,
                     message=f"   正在绘制：{char.name} ({i + 1}/{total})",
                 )
-                image_prompt = await self._build_character_prompt(char, style=style, session=ctx.session)
+                image_prompt = await self._build_character_prompt(
+                    char, style=style, session=ctx.session
+                )
                 version = await self.version_service.auto_snapshot_character(
                     ctx.session,
                     char,
@@ -184,7 +163,9 @@ class RenderAgent(BaseAgent):
                             ctx.session.add(char)
                             await ctx.session.flush()
                     except Exception as e:
-                        logger.warning("Failed to auto-populate visual_notes for %s: %s", char.name, e)
+                        logger.warning(
+                            "Failed to auto-populate visual_notes for %s: %s", char.name, e
+                        )
 
                 # Auto-compute face embedding after image is generated
                 if not char.face_embedding and external_url:
@@ -192,6 +173,7 @@ class RenderAgent(BaseAgent):
                         embedding = await compute_face_embedding(external_url)
                         if embedding is not None:
                             import json
+
                             char.face_embedding = json.dumps(embedding)
                             ctx.session.add(char)
                             await ctx.session.flush()
@@ -308,7 +290,9 @@ class RenderAgent(BaseAgent):
                         "No character images available for shot %d; using text-to-image", shot.id
                     )
 
-                image_prompt = await self._build_shot_prompt(shot, characters, style=style, session=ctx.session)
+                image_prompt = await self._build_shot_prompt(
+                    shot, characters, style=style, session=ctx.session
+                )
                 version = await self.version_service.auto_snapshot_shot(
                     ctx.session,
                     shot,

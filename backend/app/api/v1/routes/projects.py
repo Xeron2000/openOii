@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import InstrumentedAttribute
 
-from app.api.deps import SessionDep, SettingsDep, get_or_404
+from app.api.deps import SessionDep, SettingsDep, WsManagerDep, get_or_404
 from app.config import Settings
 from app.db.utils import utcnow
 from app.models.message import Message
@@ -24,6 +24,8 @@ from app.schemas.project import (
     ProjectListRead,
     ProjectRead,
     ProjectUpdate,
+    ShotReorderRead,
+    ShotReorderRequest,
     ShotRead,
     StoryOutlineRead,
     StoryOutlineUpdate,
@@ -31,6 +33,7 @@ from app.schemas.project import (
 from app.services.file_cleaner import get_local_path
 from app.services.project_deletion import delete_project_by_id, delete_projects_by_ids
 from app.services.provider_resolution import resolve_project_provider_settings_async
+from app.ws.manager import ConnectionManager
 
 router = APIRouter()
 
@@ -286,6 +289,88 @@ async def list_shots(project_id: int, session: AsyncSession = SessionDep):
         select(Shot).where(shot_project_id_col == project_id).order_by(shot_order_col.asc())
     )
     return [ShotRead.model_validate(s) for s in res.scalars().all()]
+
+
+@router.patch("/{project_id}/shots/reorder", response_model=ShotReorderRead)
+async def reorder_shots(
+    project_id: int,
+    payload: ShotReorderRequest,
+    session: AsyncSession = SessionDep,
+    ws: ConnectionManager = WsManagerDep,
+):
+    project = await get_or_404(session, Project, project_id)
+    items = payload.items
+    shot_ids = [item.shot_id for item in items]
+    if len(set(shot_ids)) != len(shot_ids):
+        raise HTTPException(status_code=400, detail="Duplicate shot_id in reorder payload")
+
+    orders = [item.order for item in items]
+    expected_orders = list(range(1, len(items) + 1))
+    if sorted(orders) != expected_orders:
+        raise HTTPException(
+            status_code=400,
+            detail="Shot order must be continuous starting at 1",
+        )
+
+    shot_project_id_col = cast(InstrumentedAttribute[int], cast(object, Shot.project_id))
+    shot_id_col = cast(InstrumentedAttribute[int | None], cast(object, Shot.id))
+    shot_order_col = cast(InstrumentedAttribute[int], cast(object, Shot.order))
+    res = await session.execute(
+        select(Shot)
+        .where(shot_project_id_col == project_id)
+        .where(shot_id_col.in_(shot_ids))
+    )
+    shots = list(res.scalars().all())
+    if len(shots) != len(shot_ids):
+        found_ids = {shot.id for shot in shots}
+        missing_ids = [shot_id for shot_id in shot_ids if shot_id not in found_ids]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown shot_ids for project: {missing_ids}",
+        )
+
+    order_by_id = {item.shot_id: item.order for item in items}
+    for shot in shots:
+        if shot.id is None:
+            raise HTTPException(status_code=400, detail="Shot id is missing")
+        shot.order = order_by_id[shot.id]
+        session.add(shot)
+
+    if project.video_url:
+        project.status = "superseded"
+        session.add(project)
+
+    await session.commit()
+
+    ordered_res = await session.execute(
+        select(Shot).where(shot_project_id_col == project_id).order_by(shot_order_col.asc())
+    )
+    ordered_shots = list(ordered_res.scalars().all())
+    shot_payload = [ShotRead.model_validate(shot).model_dump(mode="json") for shot in ordered_shots]
+
+    await ws.send_event(
+        project_id,
+        {
+            "type": "shots_reordered",
+            "data": {"project_id": project_id, "shots": shot_payload},
+        },
+    )
+    if project.video_url:
+        await ws.send_event(
+            project_id,
+            {
+                "type": "project_updated",
+                "data": {
+                    "project": {
+                        "id": project_id,
+                        "status": project.status,
+                        "video_url": project.video_url,
+                    },
+                },
+            },
+        )
+
+    return ShotReorderRead(shots=[ShotRead.model_validate(shot) for shot in ordered_shots])
 
 
 @router.get("/{project_id}/messages", response_model=list[MessageRead])

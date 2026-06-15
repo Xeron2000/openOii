@@ -18,7 +18,13 @@ def test_build_engine_uses_current_settings(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_init_db_runs_schema_check_and_config(monkeypatch):
-    calls = {"alembic_upgrade": False, "ensure_initialized": False, "apply_overrides": False, "checkpointer": False}
+    calls = {
+        "alembic_upgrade": False,
+        "ensure_initialized": False,
+        "ensure_provider_configs": False,
+        "apply_overrides": False,
+        "checkpointer": False,
+    }
 
     class FakeConfigService:
         def __init__(self, session):
@@ -26,6 +32,9 @@ async def test_init_db_runs_schema_check_and_config(monkeypatch):
 
         async def ensure_initialized(self):
             calls["ensure_initialized"] = True
+
+        async def ensure_provider_configs_initialized(self):
+            calls["ensure_provider_configs"] = True
 
         async def apply_settings_overrides(self):
             calls["apply_overrides"] = True
@@ -65,6 +74,7 @@ async def test_init_db_runs_schema_check_and_config(monkeypatch):
     assert calls == {
         "alembic_upgrade": True,
         "ensure_initialized": True,
+        "ensure_provider_configs": True,
         "apply_overrides": True,
         "checkpointer": True,
     }

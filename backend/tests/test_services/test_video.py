@@ -64,6 +64,33 @@ async def test_generate_uses_standard_payload(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_generate_uses_grok_payload_with_string_seconds(monkeypatch):
+    svc = VideoService(
+        make_settings(
+            video_base_url="https://yunwu.ai/v1",
+            video_endpoint="/video/create",
+            video_model="grok-video-3-10s",
+        )
+    )
+
+    async def fake_post(url, payload):
+        assert url == "https://yunwu.ai/v1/video/create"
+        assert payload == {
+            "model": "grok-video-3-10s",
+            "prompt": "make a video",
+            "seconds": "10",
+            "size": "16:9",
+        }
+        return {"id": "task_abc", "status": "processing"}
+
+    monkeypatch.setattr(svc, "_post_json_with_retry", fake_post)
+
+    result = await svc.generate(prompt="make a video", duration=10)
+
+    assert result == {"id": "task_abc", "status": "processing"}
+
+
+@pytest.mark.asyncio
 async def test_generate_uses_ltx_payload_without_model(monkeypatch):
     svc = VideoService(
         make_settings(
@@ -211,6 +238,35 @@ async def test_generate_url_i2v_standard_mode_polls_async_task(monkeypatch):
     object.__setattr__(svc.settings, "use_i2v", lambda: True)
 
     result = await svc.generate_url(prompt="make a video", image_bytes=b"img")
+
+    assert result == "https://cdn.example.com/i2v.mp4"
+
+
+@pytest.mark.asyncio
+async def test_generate_url_i2v_grok_payload_includes_reference_and_seconds(monkeypatch):
+    svc = VideoService(
+        make_settings(
+            video_base_url="https://yunwu.ai/v1",
+            video_endpoint="/video/create",
+            video_model="grok-video-3-10s",
+        )
+    )
+
+    async def fake_post(url, payload):
+        assert url == "https://yunwu.ai/v1/video/create"
+        assert payload == {
+            "model": "grok-video-3-10s",
+            "prompt": "make a video",
+            "seconds": "10",
+            "size": "16:9",
+            "image": "aW1n",
+        }
+        return {"status": "completed", "video_url": "https://cdn.example.com/i2v.mp4"}
+
+    monkeypatch.setattr(svc, "_post_json_with_retry", fake_post)
+    object.__setattr__(svc.settings, "use_i2v", lambda: True)
+
+    result = await svc.generate_url(prompt="make a video", image_bytes=b"img", duration=10)
 
     assert result == "https://cdn.example.com/i2v.mp4"
 

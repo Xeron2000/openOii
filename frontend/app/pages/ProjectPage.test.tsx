@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ProjectPage } from './ProjectPage';
 import { projectsApi } from '~/services/api';
-import { useChatPanelStore } from '~/stores/chatPanelStore';
 import type { AgentRun, Project, RecoveryControlRead } from '~/types';
 import { ApiError } from '~/types/errors';
 import { toast } from '~/utils/toast';
@@ -120,6 +119,11 @@ const storeState: {
   characters: never[];
   shots: never[];
   projectVideoUrl: string | null;
+  projectStatus: string | null;
+  projectTitle: string | null;
+  projectSummary: string | null;
+  projectStory: string | null;
+  blockingClips: never[] | null;
   messages: never[];
   clearMessages: ReturnType<typeof vi.fn>;
   setGenerating: ReturnType<typeof vi.fn>;
@@ -177,6 +181,11 @@ const storeState: {
   characters: emptyCharacters,
   shots: emptyShots,
   projectVideoUrl: null,
+  projectStatus: null,
+  projectTitle: null,
+  projectSummary: null,
+  projectStory: null,
+  blockingClips: null,
   messages: emptyMessages,
   clearMessages: vi.fn(),
   setGenerating: vi.fn(),
@@ -342,69 +351,47 @@ vi.mock('~/services/api', () => ({
   },
 }));
 
-vi.mock('~/components/chat/ChatDrawer', async () => {
-  const { useChatPanelStore } = await vi.importActual<typeof import('~/stores/chatPanelStore')>(
-    '~/stores/chatPanelStore',
-  );
-
-  return {
-    ChatDrawer: ({
-      generateDisabled,
-      isGenerating,
-      onGenerate,
-      onSendFeedback,
-      onConfirm,
-      onCancel,
-    }: {
-      generateDisabled?: boolean;
-      isGenerating?: boolean;
-      onGenerate?: () => void;
-      onSendFeedback?: (content: string) => void;
-      onConfirm?: (content?: string) => void;
-      onCancel?: () => void;
-    }) => {
-      const { isOpen, close } = useChatPanelStore();
-      if (!isOpen) return null;
-
-      return (
-        <div data-testid="chat-panel">
-          <button type="button" aria-label="关闭对话面板" onClick={close}>
-            关闭
-          </button>
-          <span data-testid="chat-generating-state">
-            {isGenerating ? 'generating' : 'idle'}
-          </span>
-          <button type="button" disabled={generateDisabled} onClick={onGenerate}>
-            开始生成
-          </button>
-          <button type="button" onClick={() => onSendFeedback?.('继续调整故事节奏')}>
-            发送反馈
-          </button>
-          <button type="button" onClick={() => onConfirm?.('请微调这一版')}>
-            确认并继续
-          </button>
-          <button type="button" onClick={onCancel}>
-            停止生成
-          </button>
-        </div>
-      );
-    },
-  };
-});
-
-vi.mock('~/components/layout/TopBar', () => ({
-  TopBar: ({
-    onToggleAssets,
-    onToggleHistory,
+vi.mock('~/features/comic-workflow/sidebar/WorkspaceSidebar', () => ({
+  WorkspaceSidebar: ({
+    activeTab,
+    onTabChange,
+    isGenerating,
+    onSendFeedback,
+    onConfirm,
+    onCancel,
   }: {
-    onToggleAssets?: () => void;
-    onToggleHistory?: () => void;
+    activeTab?: string;
+    onTabChange?: (tab: string) => void;
+    isGenerating?: boolean;
+    onSendFeedback?: (content: string) => void;
+    onConfirm?: (content?: string) => void;
+    onCancel?: () => void;
   }) => (
-    <div data-testid="top-bar">
-      <button type="button" onClick={onToggleAssets}>资产</button>
-      <button type="button" onClick={onToggleHistory}>历史</button>
+    <div data-testid="workspace-sidebar" data-active-tab={activeTab}>
+      <span data-testid="chat-generating-state">
+        {isGenerating ? 'generating' : 'idle'}
+      </span>
+      <button type="button" onClick={() => onTabChange?.('assets')}>
+        打开资产面板
+      </button>
+      <button type="button" onClick={() => onTabChange?.('chat')}>
+        打开对话面板
+      </button>
+      <button type="button" onClick={() => onSendFeedback?.('继续调整故事节奏')}>
+        发送反馈
+      </button>
+      <button type="button" onClick={() => onConfirm?.('请微调这一版')}>
+        确认并继续
+      </button>
+      <button type="button" onClick={onCancel}>
+        停止生成
+      </button>
     </div>
   ),
+}));
+
+vi.mock('~/components/layout/TopBar', () => ({
+  TopBar: () => <div data-testid="top-bar" />,
 }));
 
 vi.mock('~/components/layout/StagePipeline', () => ({
@@ -413,17 +400,26 @@ vi.mock('~/components/layout/StagePipeline', () => ({
     onCancel,
     onResume,
     onToggleChat,
+    awaitingConfirm,
+    workbenchStatus,
   }: {
     onGenerate?: () => void;
     onCancel?: () => void;
     onResume?: () => void;
     onToggleChat?: () => void;
+    awaitingConfirm?: boolean;
+    workbenchStatus?: { state: string };
   }) => (
-    <div data-testid="stage-pipeline">
-      <button type="button" onClick={onGenerate}>生成</button>
+    <div
+      data-testid="stage-pipeline"
+      data-workbench-status={workbenchStatus?.state}
+    >
+      <button type="button" onClick={onGenerate}>开始生成</button>
       <button type="button" onClick={onCancel}>取消</button>
       <button type="button" onClick={onResume}>恢复运行</button>
-      <button type="button" onClick={onToggleChat}>对话</button>
+      {awaitingConfirm ? (
+        <button type="button" onClick={onToggleChat}>去确认</button>
+      ) : null}
     </div>
   ),
 }));
@@ -448,18 +444,25 @@ describe('ProjectPage live hydration', () => {
       shotsLoading: false,
       messagesLoading: false,
     };
-    useChatPanelStore.getState().open();
     currentProjectData = projectData;
     storeState.isGenerating = true;
     storeState.progress = 0.35;
     storeState.currentStage = 'storyboard';
     storeState.currentAgent = null;
+    storeState.awaitingConfirm = false;
+    storeState.awaitingAgent = null;
     storeState.projectUpdatedAt = null;
     storeState.currentRunId = null;
     storeState.currentRunProviderSnapshot = null;
     storeState.recoveryControl = null;
     storeState.recoverySummary = null;
     storeState.recoveryGate = null;
+    storeState.projectVideoUrl = null;
+    storeState.projectStatus = null;
+    storeState.projectTitle = null;
+    storeState.projectSummary = null;
+    storeState.projectStory = null;
+    storeState.blockingClips = null;
     vi.mocked(projectsApi.update).mockResolvedValue(projectData as never);
     vi.mocked(projectsApi.generate).mockResolvedValue({
 		id: 77,
@@ -487,6 +490,19 @@ describe('ProjectPage live hydration', () => {
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.queryByText('Provider 选择')).not.toBeInTheDocument();
+  });
+
+  it('passes the derived workbench status to the stage pipeline', () => {
+    storeState.isGenerating = true;
+    storeState.currentRunId = 77;
+    storeState.awaitingConfirm = true;
+
+    render(<ProjectPage />);
+
+    expect(screen.getByTestId('stage-pipeline')).toHaveAttribute(
+      'data-workbench-status',
+      'awaitingConfirm',
+    );
   });
 
   it('renders without provider warning UI when provider exception exists', () => {
@@ -636,20 +652,21 @@ describe('ProjectPage live hydration', () => {
     expect(screen.getByRole('button', { name: '开始生成' })).toBeEnabled();
   });
 
-  it('reopens the chat drawer from the pipeline after the drawer is closed', async () => {
+  it('keeps workspace panel navigation owned by the sidebar', async () => {
     const user = userEvent.setup();
 
     render(<ProjectPage />);
 
-    expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('top-bar')).toBeInTheDocument();
+    expect(screen.getByTestId('workspace-sidebar')).toHaveAttribute('data-active-tab', 'chat');
 
-    await user.click(screen.getByRole('button', { name: '关闭对话面板' }));
+    await user.click(screen.getByRole('button', { name: '打开资产面板' }));
 
-    expect(screen.queryByTestId('chat-panel')).not.toBeInTheDocument();
+    expect(screen.getByTestId('workspace-sidebar')).toHaveAttribute('data-active-tab', 'assets');
 
-    await user.click(screen.getByRole('button', { name: '对话' }));
+    await user.click(screen.getByRole('button', { name: '打开对话面板' }));
 
-    expect(screen.getByTestId('chat-panel')).toBeInTheDocument();
+    expect(screen.getByTestId('workspace-sidebar')).toHaveAttribute('data-active-tab', 'chat');
   });
 
   it('keeps generate enabled when only the video provider is invalid', () => {
@@ -681,7 +698,7 @@ describe('ProjectPage live hydration', () => {
     render(<ProjectPage />);
 
     expect(screen.getByText('正在加载项目...')).toBeInTheDocument();
-    expect(screen.queryByTestId('chat-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
   });
 
   it('keeps the loading page while project workspace resources are loading', () => {
@@ -695,7 +712,7 @@ describe('ProjectPage live hydration', () => {
 
     expect(screen.getByText('正在加载项目...')).toBeInTheDocument();
     expect(screen.queryByTestId('stage-view')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('chat-panel')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-sidebar')).not.toBeInTheDocument();
   });
 
   it('clears project-scoped canvas state when route project changes', async () => {

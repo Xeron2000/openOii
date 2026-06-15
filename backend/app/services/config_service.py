@@ -41,6 +41,26 @@ RESTART_REQUIRED_PREFIXES = ("DATABASE_", "REDIS_")
 
 SETTINGS_ENV_FIELD_MAP = {name.upper(): name for name in Settings.model_fields}
 SETTINGS_DEFAULTS = Settings()
+PROVIDER_CONFIG_PREFIXES = (
+    "ANTHROPIC_",
+    "TEXT_",
+    "FAKE_TEXT_",
+    "IMAGE_",
+    "FAKE_IMAGE_",
+    "VIDEO_",
+    "DOUBAO_",
+    "FAKE_VIDEO_",
+)
+PROVIDER_CONFIG_KEYS = {
+    "ENABLE_IMAGE_TO_IMAGE",
+    "ENABLE_IMAGE_TO_VIDEO",
+    "TTS_ENABLED",
+    "TTS_DEFAULT_VOICE",
+    "TTS_VOLUME",
+    "BGM_ENABLED",
+    "BGM_VOLUME",
+    "BGM_DIRECTORY",
+}
 
 
 def _resolve_env_path() -> Path:
@@ -176,6 +196,19 @@ def _requires_restart(key: str) -> bool:
     return upper.startswith(RESTART_REQUIRED_PREFIXES)
 
 
+def _is_provider_config_key(key: str) -> bool:
+    upper = key.upper()
+    return upper in PROVIDER_CONFIG_KEYS or upper.startswith(PROVIDER_CONFIG_PREFIXES)
+
+
+def _serialize_config_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (list, dict, set, tuple)):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
 @dataclass(slots=True)
 class ConfigUpdateResult:
     updated: int
@@ -207,6 +240,48 @@ class ConfigService:
             )
             self.session.add(item)
             created += 1
+        if created:
+            await self.session.commit()
+        return created
+
+    async def ensure_provider_configs_initialized(self) -> int:
+        """Persist reusable generation-provider interface settings into DB.
+
+        Keep the scope to text/image/video/TTS/BGM provider settings. Database,
+        Redis, admin and deployment settings stay environment-owned unless the
+        user explicitly saves them.
+        """
+        env_values = _load_effective_env_values()
+        res = await self.session.execute(select(ConfigItem))
+        existing = {item.key.upper() for item in res.scalars().all()}
+        created = 0
+
+        for key in sorted(SETTINGS_ENV_FIELD_MAP):
+            if not _is_provider_config_key(key) or key in existing:
+                continue
+
+            value = env_values.get(key)
+            if value is None:
+                field_name = SETTINGS_ENV_FIELD_MAP.get(key)
+                default_value = getattr(SETTINGS_DEFAULTS, field_name, None) if field_name else None
+                if default_value is None:
+                    continue
+                value = _serialize_config_value(default_value)
+
+            if value == "":
+                continue
+
+            self.session.add(
+                ConfigItem(
+                    key=key,
+                    value=value,
+                    is_sensitive=is_sensitive_key(key),
+                    created_at=utcnow(),
+                    updated_at=utcnow(),
+                )
+            )
+            created += 1
+
         if created:
             await self.session.commit()
         return created

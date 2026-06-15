@@ -3,6 +3,7 @@ import path from 'path';
 
 // Use process.env.PORT by default and fallback to port 3000
 const PORT = process.env.PORT || 15173;
+const BROWSER_CHANNEL = process.env.PLAYWRIGHT_CHANNEL || undefined;
 
 // Set webServer.url and use.baseURL with the location of the WebServer
 const baseURL = `http://localhost:${PORT}`;
@@ -32,7 +33,10 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(BROWSER_CHANNEL ? { channel: BROWSER_CHANNEL } : {}),
+      },
     },
     // {
     //   name: 'firefox',

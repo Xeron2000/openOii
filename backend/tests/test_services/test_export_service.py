@@ -104,6 +104,15 @@ class TestExportService:
         assert service._http_client is None
 
     @pytest.mark.asyncio
+    async def test_export_webtoon_requires_shots(self, service):
+        from app.models.project import Project
+
+        project = Project(id=1, title="Empty Project", style="anime")
+
+        with pytest.raises(ValueError, match="没有可导出的分镜"):
+            await service.export_webtoon(project, [])
+
+    @pytest.mark.asyncio
     async def test_download_image_empty_url(self, service):
         result = await service._download_image("")
         assert result is None

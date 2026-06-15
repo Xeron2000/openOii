@@ -21,7 +21,9 @@ async def test_render_agent_generates_character_images(test_session, test_settin
     ctx = await make_context(test_session, test_settings, project=project, run=run, image=image)
     agent = RenderAgent()
 
-    monkeypatch.setattr(agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/char.png"))
+    monkeypatch.setattr(
+        agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/char.png")
+    )
 
     await agent._render_characters(ctx)
 
@@ -33,7 +35,9 @@ async def test_render_agent_generates_character_images(test_session, test_settin
 async def test_render_agent_skips_characters_with_images(test_session, test_settings, monkeypatch):
     project = await create_project(test_session, style="anime")
     run = await create_run(test_session, project_id=project.id)
-    await create_character(test_session, project_id=project.id, image_url="http://img.test/already.png")
+    await create_character(
+        test_session, project_id=project.id, image_url="http://img.test/already.png"
+    )
     await test_session.commit()
 
     image = FakeImageService()
@@ -55,12 +59,16 @@ async def test_render_agent_generates_shot_images(test_session, test_settings, m
     ctx = await make_context(test_session, test_settings, project=project, run=run, image=image)
     agent = RenderAgent()
 
-    monkeypatch.setattr(agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/shot.png"))
+    monkeypatch.setattr(
+        agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/shot.png")
+    )
     monkeypatch.setattr(
         "app.agents.render.resolve_shot_bound_approved_characters",
         AsyncMock(return_value=[]),
     )
-    monkeypatch.setattr(agent.image_composer, "compose_character_reference_image", AsyncMock(return_value=b"bytes"))
+    monkeypatch.setattr(
+        agent.image_composer, "compose_character_reference_image", AsyncMock(return_value=b"bytes")
+    )
 
     count = await agent._render_shots(ctx)
     assert count == 1
@@ -97,7 +105,9 @@ async def test_render_agent_target_ids_character_filter(test_session, test_setti
     ctx.target_ids = TargetIds(character_ids=[char1.id])
     agent = RenderAgent()
 
-    monkeypatch.setattr(agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/char1.png"))
+    monkeypatch.setattr(
+        agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/char1.png")
+    )
 
     count = await agent._render_characters(ctx)
     assert count == 1
@@ -121,7 +131,9 @@ async def test_render_agent_target_ids_shot_filter(test_session, test_settings, 
     ctx.target_ids = TargetIds(shot_ids=[shot1.id])
     agent = RenderAgent()
 
-    monkeypatch.setattr(agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/shot1.png"))
+    monkeypatch.setattr(
+        agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/shot1.png")
+    )
     monkeypatch.setattr(
         "app.agents.render.resolve_shot_bound_approved_characters",
         AsyncMock(return_value=[]),
@@ -142,7 +154,9 @@ async def test_render_agent_character_image_failure(test_session, test_settings,
     ctx = await make_context(test_session, test_settings, project=project, run=run, image=image)
     agent = RenderAgent()
 
-    monkeypatch.setattr(agent, "generate_and_cache_image", AsyncMock(side_effect=RuntimeError("API down")))
+    monkeypatch.setattr(
+        agent, "generate_and_cache_image", AsyncMock(side_effect=RuntimeError("API down"))
+    )
 
     count = await agent._render_characters(ctx)
     assert count == 0
@@ -162,7 +176,9 @@ async def test_render_agent_shot_image_failure(test_session, test_settings, monk
     ctx = await make_context(test_session, test_settings, project=project, run=run, image=image)
     agent = RenderAgent()
 
-    monkeypatch.setattr(agent, "generate_and_cache_image", AsyncMock(side_effect=RuntimeError("API down")))
+    monkeypatch.setattr(
+        agent, "generate_and_cache_image", AsyncMock(side_effect=RuntimeError("API down"))
+    )
     monkeypatch.setattr(
         "app.agents.render.resolve_shot_bound_approved_characters",
         AsyncMock(return_value=[]),
@@ -185,7 +201,9 @@ async def test_render_agent_full_run(test_session, test_settings, monkeypatch):
     ctx = await make_context(test_session, test_settings, project=project, run=run, image=image)
     agent = RenderAgent()
 
-    monkeypatch.setattr(agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/img.png"))
+    monkeypatch.setattr(
+        agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/img.png")
+    )
     monkeypatch.setattr(
         "app.agents.render.resolve_shot_bound_approved_characters",
         AsyncMock(return_value=[]),
@@ -209,13 +227,15 @@ def test_style_descriptor_anime():
 def test_style_descriptor_unknown():
     agent = RenderAgent()
     result = agent._style_descriptor("nonexistent_style")
-    assert "anime" in result
+    assert "nonexistent_style" in result
+    assert "non-photorealistic" in result
 
 
 def test_style_descriptor_cinematic():
     agent = RenderAgent()
     result = agent._style_descriptor("cinematic")
-    assert "photorealistic" in result
+    assert "cinematic anime comic style" in result
+    assert "cinematic, photorealistic" not in result
 
 
 def test_style_descriptor_manga():
@@ -232,7 +252,57 @@ async def test_build_character_prompt(test_session):
     char = CharModel(id=1, project_id=1, name="Hero", description="brave warrior", image_url=None)
     result = await agent._build_character_prompt(char, style="anime", session=test_session)
     assert "brave warrior" in result
+    assert "canonical character design sheet" in result
     assert "anime" in result
+    assert "non-photorealistic" in result
+
+
+@pytest.mark.asyncio
+async def test_builtin_style_descriptor_ignores_stale_db_template(test_session):
+    from app.models.style_template import StyleTemplate
+
+    test_session.add(
+        StyleTemplate(
+            name="Old Cinematic",
+            slug="cinematic",
+            category="builtin",
+            style_prompt="cinematic, photorealistic, 35mm film grain",
+            color_palette=[],
+            is_active=True,
+        )
+    )
+    await test_session.commit()
+
+    agent = RenderAgent()
+    style_prompt, negative_prompt = await agent._style_descriptor_async(test_session, "cinematic")
+
+    assert "cinematic anime comic style" in style_prompt
+    assert "35mm film grain" not in style_prompt
+    assert "live action" in negative_prompt
+
+
+@pytest.mark.asyncio
+async def test_custom_style_descriptor_preserves_custom_prompt(test_session):
+    from app.models.style_template import StyleTemplate
+
+    test_session.add(
+        StyleTemplate(
+            name="Noir Comic",
+            slug="noir-comic",
+            category="custom",
+            style_prompt="noir brush comic, sharp shadows",
+            color_palette=["black", "red"],
+            is_active=True,
+        )
+    )
+    await test_session.commit()
+
+    agent = RenderAgent()
+    style_prompt, negative_prompt = await agent._style_descriptor_async(test_session, "noir-comic")
+
+    assert "noir brush comic, sharp shadows, black, red" in style_prompt
+    assert "non-photorealistic" in style_prompt
+    assert "style drift" in negative_prompt
 
 
 @pytest.mark.asyncio
@@ -250,11 +320,30 @@ async def test_build_shot_prompt(test_session):
     from app.models.project import Character as CharModel, Shot as ShotModel
 
     agent = RenderAgent()
-    shot = ShotModel(id=1, project_id=1, order=1, description="test", image_prompt="hero in forest", prompt=None, scene=None, action=None, expression=None, camera=None, lighting=None, dialogue=None, sfx=None, duration=None, image_url=None, video_url=None, character_ids=[])
+    shot = ShotModel(
+        id=1,
+        project_id=1,
+        order=1,
+        description="test",
+        image_prompt="hero in forest",
+        prompt=None,
+        scene=None,
+        action=None,
+        expression=None,
+        camera=None,
+        lighting=None,
+        dialogue=None,
+        sfx=None,
+        duration=None,
+        image_url=None,
+        video_url=None,
+        character_ids=[],
+    )
     chars: list[CharModel] = []
     result = await agent._build_shot_prompt(shot, chars, style="anime", session=test_session)
     assert "hero in forest" in result
     assert "anime" in result
+    assert "non-photorealistic" in result
 
 
 @pytest.mark.asyncio
@@ -262,7 +351,25 @@ async def test_build_shot_prompt_no_image_prompt(test_session):
     from app.models.project import Shot as ShotModel
 
     agent = RenderAgent()
-    shot = ShotModel(id=1, project_id=1, order=1, description="fallback desc", image_prompt=None, prompt=None, scene=None, action=None, expression=None, camera=None, lighting=None, dialogue=None, sfx=None, duration=None, image_url=None, video_url=None, character_ids=[])
+    shot = ShotModel(
+        id=1,
+        project_id=1,
+        order=1,
+        description="fallback desc",
+        image_prompt=None,
+        prompt=None,
+        scene=None,
+        action=None,
+        expression=None,
+        camera=None,
+        lighting=None,
+        dialogue=None,
+        sfx=None,
+        duration=None,
+        image_url=None,
+        video_url=None,
+        character_ids=[],
+    )
     result = await agent._build_shot_prompt(shot, [], style="cinematic", session=test_session)
     assert "fallback desc" in result
 
@@ -272,30 +379,60 @@ async def test_build_shot_prompt_with_characters(test_session):
     from app.models.project import Character as CharModel, Shot as ShotModel
 
     agent = RenderAgent()
-    shot = ShotModel(id=1, project_id=1, order=1, description="test", image_prompt="scene", prompt=None, scene=None, action=None, expression=None, camera=None, lighting=None, dialogue=None, sfx=None, duration=None, image_url=None, video_url=None, character_ids=[])
+    shot = ShotModel(
+        id=1,
+        project_id=1,
+        order=1,
+        description="test",
+        image_prompt="scene",
+        prompt=None,
+        scene=None,
+        action=None,
+        expression=None,
+        camera=None,
+        lighting=None,
+        dialogue=None,
+        sfx=None,
+        duration=None,
+        image_url=None,
+        video_url=None,
+        character_ids=[],
+    )
     char = CharModel(id=1, project_id=1, name="Hero", description="warrior", image_url=None)
     result = await agent._build_shot_prompt(shot, [char], style="anime", session=test_session)
     assert "Hero" in result
+    assert "identity anchor" in result
+    assert "no redesign" in result
 
 
 @pytest.mark.asyncio
-async def test_render_agent_compose_reference_fails_fallback(test_session, test_settings, monkeypatch):
+async def test_render_agent_compose_reference_fails_fallback(
+    test_session, test_settings, monkeypatch
+):
     project = await create_project(test_session, style="anime")
     run = await create_run(test_session, project_id=project.id)
     await create_shot(test_session, project_id=project.id, image_url=None)
-    char = await create_character(test_session, project_id=project.id, image_url="http://img.test/char.png")
+    char = await create_character(
+        test_session, project_id=project.id, image_url="http://img.test/char.png"
+    )
     await test_session.commit()
 
     image = FakeImageService(url="http://image.test/shot.png")
     ctx = await make_context(test_session, test_settings, project=project, run=run, image=image)
     agent = RenderAgent()
 
-    monkeypatch.setattr(agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/shot.png"))
+    monkeypatch.setattr(
+        agent, "generate_and_cache_image", AsyncMock(return_value="http://image.test/shot.png")
+    )
     monkeypatch.setattr(
         "app.agents.render.resolve_shot_bound_approved_characters",
         AsyncMock(return_value=[char]),
     )
-    monkeypatch.setattr(agent.image_composer, "compose_character_reference_image", AsyncMock(side_effect=RuntimeError("compose fail")))
+    monkeypatch.setattr(
+        agent.image_composer,
+        "compose_character_reference_image",
+        AsyncMock(side_effect=RuntimeError("compose fail")),
+    )
     monkeypatch.setattr("asyncio.sleep", AsyncMock(return_value=None))
 
     count = await agent._render_shots(ctx)
