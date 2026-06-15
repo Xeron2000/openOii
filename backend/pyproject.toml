@@ -33,6 +33,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+  "mypy>=1.11.0",
   "ruff>=0.6.0",
   "pytest>=8.0.0",
   "pytest-asyncio>=0.24.0",
@@ -59,6 +60,32 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
 ]
+
+[tool.mypy]
+python_version = "3.10"
+strict = false
+check_untyped_defs = true
+disallow_untyped_defs = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "sqlmodel.*",
+  "alembic.*",
+  "langgraph.*",
+  "insightface.*",
+  "onnxruntime.*",
+  "cv2.*",
+  "edge_tts.*",
+  "reportlab.*",
+]
+ignore_missing_imports = true
 
 [tool.ruff]
 line-length = 100
