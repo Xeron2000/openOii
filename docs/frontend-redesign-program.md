@@ -49,6 +49,8 @@ Per batch:
 | Backend `tests/test_skills_and_reimagine.py` | 7 passed |
 | Batches 0–5 | all **done** |
 | F2 interaction freeze | no rebind of selection / generate / confirm / cancel / resume / viewport lock |
+| Manual G2 (project `/projects/3`) | viewport lock (`html/body/#root` overflow hidden, `.page-shell`); StagePipeline + regenerate chrome; canvas 九宫格; select S01 → chat shows `绑定 · shot · S01`; inspector 操作 has `重做本格 · 首帧图/视频` |
+| Git | pushed `main` (`53f258f` + `f199998`) |
 
 ## Interaction freeze (F2) checklist
 
