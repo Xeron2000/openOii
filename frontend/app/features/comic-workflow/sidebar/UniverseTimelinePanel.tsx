@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { GlobeAltIcon } from "@heroicons/react/24/outline";
 import { universesApi } from "~/services/api";
+import { toast } from "~/utils/toast";
 
 interface UniverseTimelinePanelProps {
 	universeId: number;
@@ -12,10 +13,47 @@ export function UniverseTimelinePanel({
 	universeId,
 	currentProjectId,
 }: UniverseTimelinePanelProps) {
+	const queryClient = useQueryClient();
 	const { data, isLoading, isError } = useQuery({
 		queryKey: ["universe-timeline", universeId, currentProjectId],
 		queryFn: () => universesApi.timeline(universeId, currentProjectId),
 		staleTime: 15_000,
+	});
+
+	const importCastMutation = useMutation({
+		mutationFn: () => universesApi.importSharedCast(currentProjectId),
+		onSuccess: (result) => {
+			queryClient.invalidateQueries({
+				queryKey: ["characters", currentProjectId],
+			});
+			queryClient.invalidateQueries({
+				queryKey: ["universe-timeline", universeId, currentProjectId],
+			});
+			if (result.imported_count === 0) {
+				toast.info({
+					title: "卡司已齐全",
+					message:
+						result.skipped_existing > 0
+							? `本项目已有 ${result.skipped_existing} 个共享角色，无需再导入`
+							: "宇宙暂无共享角色可导入",
+				});
+				return;
+			}
+			toast.success({
+				title: "已导入共享卡司",
+				message: `新增 ${result.imported_count} 人${
+					result.skipped_existing
+						? `，跳过已存在 ${result.skipped_existing}`
+						: ""
+				}`,
+			});
+		},
+		onError: (error: Error) => {
+			toast.error({
+				title: "导入失败",
+				message: error.message || "请稍后重试",
+			});
+		},
 	});
 
 	if (isLoading) {
@@ -51,6 +89,18 @@ export function UniverseTimelinePanel({
 						{data.world_setting}
 					</p>
 				) : null}
+				<button
+					type="button"
+					className="btn btn-primary btn-xs mt-2 h-7 min-h-7 w-full"
+					disabled={
+						importCastMutation.isPending || data.shared_character_count === 0
+					}
+					onClick={() => importCastMutation.mutate()}
+				>
+					{importCastMutation.isPending
+						? "导入中…"
+						: `沿用共享卡司到本章（${data.shared_character_count}）`}
+				</button>
 			</div>
 
 			<ul className="m-0 min-h-0 flex-1 list-none space-y-1 overflow-y-auto overscroll-contain p-2">

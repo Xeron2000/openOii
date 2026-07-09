@@ -58,6 +58,48 @@ async def test_update_universe_can_clear_nullable_fields(async_client, test_sess
     assert data["cover_image_url"] is None
 
 
+async def test_import_shared_cast_into_project(async_client, test_session):
+    from app.models.project import Project, Character
+    from app.models.universe import Universe, SharedCharacter, UniverseProjectLink
+
+    universe = Universe(name="Cast World")
+    test_session.add(universe)
+    await test_session.commit()
+    await test_session.refresh(universe)
+
+    project = Project(
+        title="第1章",
+        story="s",
+        style="anime",
+        status="draft",
+        universe_id=universe.id,
+    )
+    test_session.add(project)
+    await test_session.commit()
+    await test_session.refresh(project)
+    test_session.add(
+        UniverseProjectLink(universe_id=universe.id, project_id=project.id, chapter_number=1)
+    )
+    test_session.add(
+        SharedCharacter(universe_id=universe.id, name="艾拉", description="勘探员")
+    )
+    test_session.add(
+        SharedCharacter(universe_id=universe.id, name="意识体", description="遗迹")
+    )
+    # Existing same-name should be skipped
+    test_session.add(Character(project_id=project.id, name="艾拉", description="已有"))
+    await test_session.commit()
+
+    res = await async_client.post(
+        f"/api/v1/universes/projects/{project.id}/import-shared-cast"
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["imported_count"] == 1
+    assert data["skipped_existing"] == 1
+    assert data["imported"][0]["name"] == "意识体"
+
+
 async def test_universe_timeline_lists_chapters_with_counts(async_client, test_session):
     from app.models.project import Project, Character, Shot
     from app.models.universe import Universe, UniverseProjectLink

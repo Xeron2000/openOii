@@ -203,10 +203,19 @@ export const ComicCanvasToolbar = track(function ComicCanvasToolbar({
 				disabled={fillDisabled || filling}
 				label="补齐空格 · 首帧"
 				showLabel
-				labelText={filling ? "补齐中" : "补齐"}
+				labelText={filling ? "补齐中" : "补图"}
 				onClick={() => handleFillEmpty("image")}
 			>
-				<span className="font-mono text-[10px] font-bold">空</span>
+				<span className="font-mono text-[10px] font-bold">图</span>
+			</ToolButton>
+			<ToolButton
+				disabled={fillDisabled || filling}
+				label="补齐空格 · 视频"
+				showLabel
+				labelText={filling ? "补齐中" : "补视"}
+				onClick={() => handleFillEmpty("video")}
+			>
+				<span className="font-mono text-[10px] font-bold">视</span>
 			</ToolButton>
 
 			<Divider />

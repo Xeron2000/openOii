@@ -19,6 +19,7 @@ from app.schemas.universe import (
     UniverseTimelineChapterRead,
     UniverseTimelineRead,
     ImportedCharacterRead,
+    ImportSharedCastRead,
     SharedCharacterRead,
     SharedCharacterPromote,
     SharedCharacterManualCreate,
@@ -396,6 +397,47 @@ async def import_character_to_project(
         "name": character.name,
         "project_id": character.project_id,
     }
+
+
+@router.post(
+    "/projects/{project_id}/import-shared-cast",
+    response_model=ImportSharedCastRead,
+    status_code=status.HTTP_200_OK,
+)
+async def import_shared_cast_to_project(
+    project_id: int,
+    session: AsyncSession = SessionDep,
+):
+    """将宇宙全部共享角色导入当前章节项目（跳过已存在同名）。"""
+    project = await get_or_404(session, Project, project_id)
+    if not project.universe_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Project is not linked to a universe",
+        )
+
+    svc = UniverseService(session)
+    shared = await svc.get_universe_shared_characters(project.universe_id)
+    existing_res = await session.execute(
+        select(Character).where(Character.project_id == project_id)
+    )
+    existing_names = {c.name for c in existing_res.scalars().all()}
+    skipped = sum(1 for sc in shared if sc.name in existing_names)
+
+    imported = await svc.auto_import_shared_characters(project_id, mode="all")
+    return ImportSharedCastRead(
+        project_id=project_id,
+        imported_count=len(imported),
+        imported=[
+            ImportedCharacterRead(
+                id=c.id if c.id is not None else 0,
+                name=c.name,
+                project_id=c.project_id,
+            )
+            for c in imported
+        ],
+        skipped_existing=skipped,
+    )
 
 
 @router.post("/characters/{character_id}/sync-to-universe", response_model=SharedCharacterRead)

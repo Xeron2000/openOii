@@ -724,6 +724,16 @@ export const universesApi = {
 			{ method: "POST" },
 		),
 
+	importSharedCast: (projectId: number) =>
+		fetchApi<{
+			project_id: number;
+			imported_count: number;
+			imported: Array<{ id: number; name: string; project_id: number }>;
+			skipped_existing: number;
+		}>(`/api/v1/universes/projects/${projectId}/import-shared-cast`, {
+			method: "POST",
+		}),
+
 	syncCharacter: (characterId: number) =>
 		fetchApi<import("~/types").SharedCharacterRead>(
 			`/api/v1/universes/characters/${characterId}/sync-to-universe`,

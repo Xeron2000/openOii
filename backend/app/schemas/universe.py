@@ -51,6 +51,13 @@ class ImportedCharacterRead(BaseModel):
     project_id: int
 
 
+class ImportSharedCastRead(BaseModel):
+    project_id: int
+    imported_count: int
+    imported: list[ImportedCharacterRead] = Field(default_factory=list)
+    skipped_existing: int = 0
+
+
 class SharedCharacterRead(BaseModel):
     id: int
     universe_id: int
