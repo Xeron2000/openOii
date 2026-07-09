@@ -9,8 +9,8 @@
 |------|-------------------|--------------|------|
 | Agent 团队流水线 | ~7 类专家接力 | Outline/Plan/Render/Compose/Critic | 保留并扩展场景/艺术总监角色 |
 | 无限画布 | 智能画布，素材可点选唤 Agent | tldraw comic-workflow | 选中绑定对话 + 局部重做 |
-| Skill 库 | 行业工作流可挂载 | 无 | 配置化 skill presets |
-| 拉片复刻 | 上传视频 → 约 18 维拉片 | 无 | Phase 4 近似实现 |
+| Skill 库 | 行业工作流可挂载 | 6 个简单 Skill + 厚 directives | 只做简单可跑通工作流 |
+| 拉片复刻 | 上传视频 → 约 18 维拉片 | **不做**（产品面已移除） | 近端明确非目标 |
 | 托管 / 对话 | 两种模式 | review / quick | 产品化文案与入口 |
 | 资产复用 | 角色/IP 资产 | Universe + Asset + StyleTemplate | 强化跨项目 |
 | 成片合成 | 视频 + BGM + 剪辑 | compose + audio | 产品化导出 |
@@ -23,7 +23,7 @@
 | 1 | 首页 Skill 墙 + 项目页导演台布局 + token 收紧 | ✅ |
 | 2 | 画布选中 ↔ Agent 上下文 + feedback_entity feedback | ✅ |
 | 3 | Skill schema + catalog API 驱动编排入口 | ✅ **深度**：`Project.skill_id` 持久化、directives 注入 outline/plan、默认镜头数/模式 |
-| 4 | 拉片复刻（文本 brief 18 维 + 槽位替换） | ✅ **深度**：LLM keyword-only 修复、维度 UI、`reimagine_meta` 落库 |
+| 4 | 拉片复刻 | ❌ **产品下线**：catalog/UI/API 已卸；仅保留历史 DB 字段与遗留 service |
 | 5a | 九宫格分镜 + 单格重做 | ✅ **深度**：多选批量重做、排序重排 order、`entity_ids` 多格反馈 |
 | 宇宙 | IP 宇宙章节 + 共享角色 | ✅ **深度**：自动导入共享卡司、outline/render 宇宙上下文、提升/导入/编辑 UI |
 | 5b | 场景 Agent / 真视频上传多模态 / 画布图编 | 默认不做 |
@@ -33,8 +33,9 @@
 - HITL：`interrupt()` in approval nodes + `Command(resume=…)` only
 - Driver：`app/orchestration/driver.py` 抽出 interrupt 循环
 - State：`skill_id` / `focus_entity_*` 写入 Phase2State
-- Skills：`app/skills/catalog.py` + `context.py` → `/api/v1/skills`；FE 以 API 为 SSOT
-- Reimagine：`app/services/reimagine.py` → `/api/v1/reimagine/analyze`
+- Skills（仅 6 个简单流）：`story-anime` / `character-design` / `script-breakdown` / `quick-short` / `scene-design` / `comedy-pet`  
+  - 每 skill：`directives` + `story_template` + `pipeline_hints` + 入口 stage/agent  
+  - 注入 outline/plan system prompt；创建 时回填默认 style/镜头数/模式  
 - Selection：review `target_ids` → orchestrator cleanup/render 局部重跑  
   - 反馈语义路由：对白/设定 → plan；画面/光色 → render；运镜/视频 → compose  
   - resume 继承 `project.skill_id`；compose/render 注入实体反馈
@@ -45,6 +46,8 @@
 - 闭源视频模型供应链与积分体系
 - 运营级 200+ 风格 / 全量行业 Skill 库存
 - 完整移动端导演台
+- **拉片复刻 / 真视频上传 / 产品广告等复杂实验工作流**
+- 只有 catalog 名没有 directives/template 的薄壳 Skill
 
 ## 前端信息架构（Phase 1）
 
