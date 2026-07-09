@@ -34,7 +34,9 @@
 - State：`skill_id` / `focus_entity_*` 写入 Phase2State
 - Skills：`app/skills/catalog.py` + `context.py` → `/api/v1/skills`；FE 以 API 为 SSOT
 - Reimagine：`app/services/reimagine.py` → `/api/v1/reimagine/analyze`
-- Selection：review `target_ids` → orchestrator cleanup/render 局部重跑
+- Selection：review `target_ids` → orchestrator cleanup/render 局部重跑  
+  - 反馈语义路由：对白/设定 → plan；画面/光色 → render；运镜/视频 → compose  
+  - resume 继承 `project.skill_id`；compose/render 注入实体反馈
 
 ## 明确不做（近端）
 

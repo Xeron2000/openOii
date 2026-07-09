@@ -494,6 +494,17 @@ class PlanAgent(BaseAgent):
         reimagine_meta = getattr(ctx.project, "reimagine_meta", None)
         if isinstance(reimagine_meta, dict) and reimagine_meta:
             payload["reimagine_meta"] = reimagine_meta
+        if ctx.entity_type and ctx.entity_id is not None:
+            payload["focus_entity"] = {
+                "type": ctx.entity_type,
+                "id": ctx.entity_id,
+            }
+            # Bias incremental preserve_ids toward the focused entity
+            if is_incremental and ctx.target_ids:
+                payload["preserve_hint"] = {
+                    "characters": list(ctx.target_ids.character_ids or []),
+                    "shots": list(ctx.target_ids.shot_ids or []),
+                }
 
         # Inject universe context if project belongs to a universe
         universe_info = await self._get_universe_context(ctx)

@@ -948,12 +948,14 @@ class GenerationOrchestrator:
                 error=None,
             )
 
+            resume_skill_id = getattr(project, "skill_id", None)
             ctx = self._build_agent_context(
                 project=project,
                 run=run,
-                request=GenerateRequest(),
+                request=GenerateRequest(skill_id=resume_skill_id),
             )
             ctx.user_feedback = None
+            ctx.skill_id = resume_skill_id
 
             await self.ws.send_event(
                 project_id,
@@ -976,7 +978,10 @@ class GenerationOrchestrator:
                 run_id,
                 agent="orchestrator",
                 role="system",
-                content=f"Resuming from checkpoint at {resume_stage}: {recovery!r}",
+                content=(
+                    f"Resuming from checkpoint at {resume_stage}"
+                    f" skill={resume_skill_id!r}: {recovery!r}"
+                ),
             )
 
             async with build_postgres_checkpointer(self.settings.database_url) as checkpointer:
@@ -994,6 +999,7 @@ class GenerationOrchestrator:
                     agent_context=ctx,
                     start_stage=resume_stage,
                     auto_mode=auto_mode,
+                    skill_id=resume_skill_id,
                 )
                 video_generation_skipped, final_stage = await self._invoke_phase2_graph(
                     project=project,

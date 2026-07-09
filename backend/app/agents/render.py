@@ -65,7 +65,13 @@ class RenderAgent(BaseAgent):
         face_anchor = "detailed face, clear facial features, sharp eyes"
         prompt = f"{desc}, {CHARACTER_IDENTITY_LOCK}, {face_anchor}, {style_desc}"
         if user_feedback and user_feedback.strip():
-            prompt += f", 用户反馈：{user_feedback.strip()}"
+            fb = user_feedback.strip()
+            if fb.startswith("[focus:"):
+                closing = fb.find("] ")
+                if closing != -1:
+                    fb = fb[closing + 2 :].strip()
+            if fb:
+                prompt += f", 用户反馈：{fb}"
         if negative:
             prompt += f" || negative: {negative}"
         return prompt
@@ -94,7 +100,13 @@ class RenderAgent(BaseAgent):
         style_desc, negative = await self._style_descriptor_async(session, style)
         parts.append(style_desc)
         if user_feedback and user_feedback.strip():
-            parts.append(f"用户反馈：{user_feedback.strip()}")
+            fb = user_feedback.strip()
+            if fb.startswith("[focus:"):
+                closing = fb.find("] ")
+                if closing != -1:
+                    fb = fb[closing + 2 :].strip()
+            if fb:
+                parts.append(f"用户反馈：{fb}")
         if negative:
             parts.append(f"|| negative: {negative}")
         return ", ".join(parts)

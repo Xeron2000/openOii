@@ -44,6 +44,9 @@ Skill Policy / Skill 策略（当 skill 存在时强制遵守）
 - If user says "一个角色" / "只保留一个角色", you MUST keep only 1 character and DELETE all others
 - If user says "三个分镜" / "只保留三个分镜", you MUST keep only 3 shots total and DELETE all others
 - Output "preserve_ids" to indicate which existing items to KEEP (items not in preserve_ids will be DELETED)
+- If focus_entity is present, primarily update THAT entity (character or shot id). Keep other entities stable via preserve_ids.
+- If preserve_hint is present, prefer preserving those ids plus any siblings the user did not ask to change.
+- user_feedback may start with [focus:type:id]; treat it as binding to that canvas selection.
 
 Output Rules / 输出规则（严格遵守）
 - Output MUST be a single valid JSON object (no Markdown, no code fences, no extra text).

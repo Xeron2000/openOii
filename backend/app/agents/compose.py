@@ -32,7 +32,13 @@ class ComposeAgent(BaseAgent):
         self.image_composer = ImageComposer()
 
     async def _build_video_prompt(
-        self, shot: Shot, characters: list[Character], *, style: str, session
+        self,
+        shot: Shot,
+        characters: list[Character],
+        *,
+        style: str,
+        session,
+        user_feedback: str | None = None,
     ) -> str:
         desc = shot.prompt or shot.description
         parts = [desc.strip()]
@@ -48,6 +54,15 @@ class ComposeAgent(BaseAgent):
             parts.append(f"Continuity lock: {VIDEO_CONTINUITY_LOCK}")
         parts.append(f"Visual style lock: {resolved_style.style_prompt}")
         parts.append(f"Avoid: {resolved_style.negative_prompt}")
+        if user_feedback and user_feedback.strip():
+            # Strip focus prefix noise for the video model
+            fb = user_feedback.strip()
+            if fb.startswith("[focus:"):
+                closing = fb.find("] ")
+                if closing != -1:
+                    fb = fb[closing + 2 :].strip()
+            if fb:
+                parts.append(f"用户反馈：{fb}")
         return ", ".join(parts)
 
     def _build_i2v_prompt(self, prompt: str, *, image_mode: str) -> str:
@@ -129,8 +144,21 @@ class ComposeAgent(BaseAgent):
                     },
                 )
                 characters = await resolve_shot_bound_approved_characters(ctx.session, shot)
+                entity_fb = (
+                    ctx.user_feedback
+                    if ctx.user_feedback
+                    and (
+                        ctx.entity_type in {"shot", "video"}
+                        and (ctx.entity_id is None or ctx.entity_id == shot.id)
+                    )
+                    else None
+                )
                 video_prompt = await self._build_video_prompt(
-                    shot, characters, style=ctx.project.style, session=ctx.session
+                    shot,
+                    characters,
+                    style=ctx.project.style,
+                    session=ctx.session,
+                    user_feedback=entity_fb,
                 )
                 if use_image_mode and shot.image_url:
                     video_prompt = self._build_i2v_prompt(video_prompt, image_mode=image_mode)

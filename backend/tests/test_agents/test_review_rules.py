@@ -9,6 +9,7 @@ from app.agents.review_rules import (
     _decide_mode,
     _is_full_restart_feedback,
     _is_retry_merge_feedback,
+    resolve_entity_start_agent,
 )
 from tests.agent_fixtures import make_context
 from tests.factories import create_project, create_run
@@ -142,6 +143,26 @@ async def test_review_compose_feedback_type(test_session, test_settings):
     assert result["start_agent"] == "compose"
 
 
+class TestResolveEntityStartAgent:
+    def test_default_shot_is_render(self):
+        assert resolve_entity_start_agent("shot", "再生成一下") == "render"
+
+    def test_dialogue_routes_to_plan(self):
+        assert resolve_entity_start_agent("shot", "把对白改成更冷一点") == "plan"
+
+    def test_night_scene_routes_to_render(self):
+        assert resolve_entity_start_agent("shot", "换成夜景光影") == "render"
+
+    def test_video_keyword_routes_to_compose(self):
+        assert resolve_entity_start_agent("shot", "重做视频运镜") == "compose"
+
+    def test_video_entity_type(self):
+        assert resolve_entity_start_agent("video", "anything") == "compose"
+
+    def test_character_rename_to_plan(self):
+        assert resolve_entity_start_agent("character", "改名为艾拉") == "plan"
+
+
 @pytest.mark.asyncio
 async def test_review_per_entity_character(test_session, test_settings):
     project = await create_project(test_session)
@@ -155,6 +176,9 @@ async def test_review_per_entity_character(test_session, test_settings):
 
     assert result["start_agent"] == "render"
     assert result["mode"] == "incremental"
+    assert result["target_ids"] is not None
+    assert result["target_ids"].character_ids == [5]
+    assert ctx.user_feedback.startswith("[focus:character:5]")
 
 
 @pytest.mark.asyncio
@@ -170,6 +194,25 @@ async def test_review_per_entity_shot(test_session, test_settings):
 
     assert result["start_agent"] == "render"
     assert result["mode"] == "incremental"
+    assert result["target_ids"] is not None
+    assert result["target_ids"].shot_ids == [10]
+
+
+@pytest.mark.asyncio
+async def test_review_per_entity_shot_dialogue_routes_plan(test_session, test_settings):
+    project = await create_project(test_session)
+    run = await create_run(test_session, project_id=project.id)
+    ctx = await make_context(test_session, test_settings, project=project, run=run)
+    ctx.user_feedback = "对白改成低声呢喃"
+    ctx.entity_type = "shot"
+    ctx.entity_id = 10
+
+    result = await ReviewRuleEngine().run(ctx)
+
+    assert result["start_agent"] == "plan"
+    assert result["mode"] == "incremental"
+    assert result["target_ids"].shot_ids == [10]
+    assert "plan" in result["reason"]
 
 
 @pytest.mark.asyncio
