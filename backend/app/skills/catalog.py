@@ -1,4 +1,4 @@
-"""Declarative skill presets that map UI entries onto graph start stages + creative policy."""
+"""Simple, production-backed skill presets — no experimental pipelines."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ class SkillDefinition:
     id: str
     title: str
     description: str
-    badge: Literal["core", "new", "soon"] | None
+    badge: Literal["core", "new"] | None
     start_stage: Phase2Stage
     start_agent: AgentName
     prefer_auto_mode: bool = False
@@ -24,88 +24,122 @@ class SkillDefinition:
     default_style: str | None = None
     default_creation_mode: CreationMode | None = None
     default_target_shot_count: int | None = None
-    """Creative policy injected into outline/plan LLM payloads."""
     directives: str = ""
-    """Soft constraints (prioritize, tone, pacing, etc.)."""
     pipeline_hints: dict[str, Any] = field(default_factory=dict)
-    """UI placeholder when skill is selected."""
     placeholder: str = ""
+    """When selected and story is empty, fill this starter scaffold."""
+    story_template: str = ""
     available: bool = True
 
 
 SKILL_CATALOG: tuple[SkillDefinition, ...] = (
     SkillDefinition(
         id="story-anime",
-        title="剧情故事创作",
-        description="一句话 → 大纲、角色、分镜、视频的完整漫剧链路。",
+        title="剧情故事",
+        description="一句话开故事：大纲 → 角色 → 分镜 → 成片。",
         badge="core",
         start_stage="plan_outline",
         start_agent="outline",
         default_style="anime",
         default_creation_mode="review",
-        placeholder="主角是谁？冲突是什么？最想看到的三帧画面？",
+        default_target_shot_count=8,
+        placeholder="主角是谁？想要什么？最大阻碍是什么？结尾情绪？",
+        story_template=(
+            "主角：\n"
+            "目标：\n"
+            "冲突：\n"
+            "关键画面（3 帧）：\n"
+            "1. \n2. \n3. \n"
+            "风格/情绪：\n"
+        ),
         directives=(
-            "按完整漫剧链路规划：清晰 logline、三幕结构、可拍摄短片节奏。"
-            "角色与分镜服务叙事弧；保持日漫/动画可读的视觉语法。"
-            "除非用户指定镜头数，控制在 6–10 镜，避免冗长过场。"
+            "完整短篇漫剧：必须输出清晰 logline、三幕结构、可拍摄节奏。"
+            "角色 2–4 人，每人有可辨识外形与动机；分镜服务叙事弧，不堆无过场。"
+            "默认 6–10 镜；每镜含 scene / action / camera / dialogue（可空）可执行字段。"
+            "风格锁定为日漫/动画可读语法：清晰轮廓、表情可读、镜头语言简单明确。"
         ),
         pipeline_hints={
             "prioritize": "full",
             "tone": "narrative",
             "shot_bias": "balanced",
+            "min_characters": 2,
+            "max_characters": 4,
         },
     ),
     SkillDefinition(
         id="character-design",
         title="角色设计",
-        description="先锁定人设与形象，再进入分镜生产。",
+        description="先做稳人设与形象，再用少量镜头验收。",
         badge="core",
         start_stage="plan_characters",
         start_agent="plan",
-        story_prefix="【角色设计优先】\n",
+        story_prefix="【角色设计】\n",
         default_style="anime",
         default_creation_mode="review",
         default_target_shot_count=4,
-        placeholder="描述角色外貌、性格、标志性道具与出场情绪。",
+        placeholder="外貌、性格、标志道具、出场情绪、和谁互动？",
+        story_template=(
+            "【角色设计】\n"
+            "角色名：\n"
+            "年龄/身份：\n"
+            "外貌（发型发色、瞳色、体型、服装、标志物）：\n"
+            "性格与说话方式：\n"
+            "关系（对手/同伴）：\n"
+            "想用 2–4 个镜头展示的瞬间：\n"
+        ),
         directives=(
-            "优先完成角色设定与 visual_notes：发型/发色、瞳色、体型、服装、标志物、配色。"
-            "每位角色必须可被图像模型稳定复现；性格要能映射到表情与姿态。"
-            "分镜从简：仅用少量镜头展示角色出场与关键互动，待人设稳定后再扩写。"
-            "不要为了铺剧情稀释角色辨识度。"
+            "本 skill 以角色圣经为第一产物：每位角色必须有可复现 visual_notes"
+            "（发型/发色、瞳色、肤色、体型、服装、标志配件）。"
+            "性格必须映射到表情与姿态；角色数量优先质量（1–3 人）。"
+            "分镜仅用于验收人设：出场、标志动作、情绪特写，不要展开长剧情。"
+            "禁止为了剧情牺牲外形一致性。"
         ),
         pipeline_hints={
             "prioritize": "characters",
             "tone": "character-bible",
             "shot_bias": "sparse",
+            "min_characters": 1,
+            "max_characters": 3,
         },
     ),
     SkillDefinition(
         id="script-breakdown",
-        title="剧本智能拆分",
-        description="把已有剧本拆成镜头清单与场次结构。",
+        title="剧本拆分",
+        description="粘贴剧本/分场，拆成可审阅分镜清单。",
         badge="core",
         start_stage="plan_outline",
         start_agent="outline",
         story_prefix="【剧本拆分】\n",
         default_style="cinematic",
         default_creation_mode="review",
-        placeholder="粘贴剧本或分场大纲，系统会拆成可审阅分镜。",
+        default_target_shot_count=None,
+        placeholder="粘贴完整剧本、分场大纲或场次表。",
+        story_template=(
+            "【剧本拆分】\n"
+            "（在下方粘贴剧本或分场）\n\n"
+            "场次/镜号（如有）：\n"
+            "必须保留的对白：\n"
+            "可省略的过场：\n"
+        ),
         directives=(
-            "将用户输入视为剧本/分场文本，优先拆解为场次、动作、对白、镜头。"
-            "保留原文关键对白与情节节点，不要改写成无关新故事。"
-            "大纲 acts 对应剧本场次节奏；shots 覆盖全部关键 beat，标注 camera/action/dialogue。"
-            "若文本已含镜号，尊重原有结构并规范化。"
+            "用户输入是剧本或分场文本，不是灵感脑暴。"
+            "必须保留关键情节节点与关键对白原文（可轻度压缩）。"
+            "大纲 acts 对齐场次节奏；shots 覆盖全部关键 beat。"
+            "每个 shot 必填：scene、action、camera、dialogue（若该 beat 有对白）。"
+            "若原文已有镜号/场号，规范化为连续 order，不要重写成无关故事。"
+            "镜头数随剧本长度自适应，不硬凑也不无故删关键场次。"
         ),
         pipeline_hints={
             "prioritize": "script",
             "tone": "breakdown",
             "shot_bias": "coverage",
+            "preserve_dialogue": True,
         },
     ),
     SkillDefinition(
         id="quick-short",
         title="快速成片",
-        description="少打断、托管式跑通整条流水线，适合草稿验证。",
+        description="少打断自动跑通，适合草稿验证。",
         badge="core",
         start_stage="plan_outline",
         start_agent="outline",
@@ -113,96 +147,69 @@ SKILL_CATALOG: tuple[SkillDefinition, ...] = (
         default_style="anime",
         default_creation_mode="quick",
         default_target_shot_count=5,
-        placeholder="用一句话描述短片点子，系统将自动推进各阶段。",
+        placeholder="一句话短片点子（角色 + 冲突 + 结局）。",
+        story_template=(
+            "一句话点子：\n"
+            "主角：\n"
+            "冲突/反转：\n"
+            "结局：\n"
+        ),
         directives=(
-            "追求最短可成片路径：简单冲突、少角色（1–2）、短三幕。"
-            "默认约 5 个镜头；每镜信息密度高，避免复杂群戏与长对白。"
-            "风格清晰、构图直白，便于一键渲染与合成。"
+            "最短可成片路径：1 个核心冲突，1–2 个角色，短三幕。"
+            "固定约 5 镜；每镜信息密度高，禁止复杂群戏与长对白。"
+            "构图直白、主体居中、便于一键渲染合成。"
+            "auto 模式下减少需确认的歧义设定，默认合理即可。"
         ),
         pipeline_hints={
             "prioritize": "full",
             "tone": "draft-fast",
             "shot_bias": "short",
-        },
-    ),
-    SkillDefinition(
-        id="video-reimagine",
-        title="拉片复刻",
-        description="结构化拆解参考片要点 → 换元素再生成。",
-        badge="core",
-        start_stage="plan_outline",
-        start_agent="outline",
-        story_prefix="【拉片复刻】\n",
-        default_style="cinematic",
-        default_creation_mode="review",
-        default_target_shot_count=6,
-        placeholder="用文字描述想复刻的镜头结构与替换元素。",
-        directives=(
-            "用户 story 可能包含【拉片复刻生成指令】与 18 维导演维度。"
-            "必须保留参考片的叙事结构、节奏、镜头类型与情绪曲线；"
-            "仅替换角色/场景/道具/风格等指定槽位。"
-            "分镜要体现原作运镜与景别逻辑，不要另起炉灶写成完全不同的故事。"
-            "若存在 reimagine 维度列表，将其视为硬约束。"
-        ),
-        pipeline_hints={
-            "prioritize": "structure-preserving",
-            "tone": "reimagine",
-            "shot_bias": "match-reference",
-        },
-    ),
-    SkillDefinition(
-        id="product-ad",
-        title="商品展示广告",
-        description="卖点 + 产品参考 → 广告分镜短片工作流。",
-        badge="core",
-        start_stage="plan_outline",
-        start_agent="outline",
-        story_prefix="【商品广告】\n",
-        default_style="cinematic",
-        default_creation_mode="review",
-        default_target_shot_count=5,
-        placeholder="产品是什么？核心卖点？目标受众与口播语气？",
-        directives=(
-            "广告结构：钩子开场 → 痛点/场景 → 产品展示 → 卖点证明 → CTA 收尾。"
-            "镜头短而密（约 4–6 镜）；产品始终清晰可见；对白可作口播卖点。"
-            "视觉偏商业广告：干净构图、产品光、品牌感色调。"
-            "不要写成剧情长片；冲突服务转化，不是文学叙事。"
-        ),
-        pipeline_hints={
-            "prioritize": "product",
-            "tone": "commercial",
-            "shot_bias": "short-ad",
+            "min_characters": 1,
+            "max_characters": 2,
+            "fixed_shot_count": 5,
         },
     ),
     SkillDefinition(
         id="scene-design",
-        title="场景设计",
-        description="先铺场景资产，再挂角色与镜头。",
-        badge=None,
-        start_stage="plan_shots",
+        title="场景分镜",
+        description="先写清空间与光影，再挂角色走位。",
+        badge="core",
+        start_stage="plan_characters",
         start_agent="plan",
-        story_prefix="【场景优先】\n",
+        story_prefix="【场景分镜】\n",
         default_style="donghua",
         default_creation_mode="review",
         default_target_shot_count=6,
-        placeholder="描述时代、地点、天气、光线与关键道具。",
+        placeholder="时代、地点、天气、光线、关键道具与想拍的走位。",
+        story_template=(
+            "【场景分镜】\n"
+            "地点：\n"
+            "时代/氛围：\n"
+            "天气与光线：\n"
+            "关键道具/建筑：\n"
+            "镜头想逛的路径（远→近 / 环绕 / 跟拍）：\n"
+            "出场角色（可少）：\n"
+        ),
         directives=(
-            "优先建立场景空间：时代、地点、天气、光线、材质、标志道具与氛围。"
-            "角色可从简，但每镜 scene/lighting/camera 必须具体可绘。"
-            "通过运镜游走同一或相邻空间，建立空间连贯性。"
-            "visual_bible 侧重环境与光影语言。"
+            "空间优先：每镜 scene / lighting / camera 必须具体可绘。"
+            "先建立同一或相邻空间的连贯性，再用运镜游走（推、拉、跟、环、俯仰）。"
+            "角色可少（0–2），但若出现必须与空间关系清晰（站位、遮挡、景深）。"
+            "visual_bible 侧重环境材质、色温、光比；默认 6 镜左右的空间导览式分镜。"
         ),
         pipeline_hints={
             "prioritize": "scenes",
             "tone": "environment",
             "shot_bias": "spatial",
+            "min_characters": 0,
+            "max_characters": 2,
+            "fixed_shot_count": 6,
         },
     ),
     SkillDefinition(
         id="comedy-pet",
-        title="萌宠 / 搞笑短片",
-        description="轻松题材模板：节奏更快、分镜更短。",
-        badge=None,
+        title="萌宠搞笑",
+        description="短平快反转，适合萌宠/沙雕桥段。",
+        badge="core",
         start_stage="plan_outline",
         start_agent="outline",
         prefer_auto_mode=True,
@@ -210,15 +217,24 @@ SKILL_CATALOG: tuple[SkillDefinition, ...] = (
         default_creation_mode="quick",
         default_target_shot_count=5,
         placeholder="宠物/搞笑桥段一句话，最好带反转。",
+        story_template=(
+            "宠物/角色：\n"
+            "搞笑设定：\n"
+            "反转/笑点：\n"
+            "结局画面：\n"
+        ),
         directives=(
             "轻松搞笑短片：快节奏、强反转、表情与肢体夸张可读。"
-            "1–2 个萌宠/拟人角色即可；分镜偏短（约 5 镜），结尾必须有笑点或反转。"
-            "允许轻微超现实，但保持角色造型稳定以便连戏。"
+            "1–2 个萌宠或拟人角色；约 5 镜；结尾必须有笑点或反转。"
+            "造型稳定以便连戏；允许轻微超现实，但不要复杂世界观。"
         ),
         pipeline_hints={
             "prioritize": "full",
             "tone": "comedy",
             "shot_bias": "short-punchy",
+            "min_characters": 1,
+            "max_characters": 2,
+            "fixed_shot_count": 5,
         },
     ),
 )
@@ -227,13 +243,16 @@ _BY_ID: dict[str, SkillDefinition] = {skill.id: skill for skill in SKILL_CATALOG
 
 
 def list_skills() -> list[SkillDefinition]:
-    return list(SKILL_CATALOG)
+    return [s for s in SKILL_CATALOG if s.available]
 
 
 def get_skill(skill_id: str | None) -> SkillDefinition | None:
     if not skill_id or not skill_id.strip():
         return None
-    return _BY_ID.get(skill_id.strip())
+    skill = _BY_ID.get(skill_id.strip())
+    if skill is None or not skill.available:
+        return None
+    return skill
 
 
 @dataclass(frozen=True, slots=True)

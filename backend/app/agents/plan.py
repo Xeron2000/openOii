@@ -462,9 +462,6 @@ class PlanAgent(BaseAgent):
         skill_obj = skill_payload(skill_id)
         if skill_obj:
             payload["skill"] = skill_obj
-        reimagine_meta = getattr(ctx.project, "reimagine_meta", None)
-        if isinstance(reimagine_meta, dict) and reimagine_meta:
-            payload["reimagine_meta"] = reimagine_meta
         if ctx.entity_type and ctx.entity_id is not None:
             payload["focus_entity"] = {
                 "type": ctx.entity_type,

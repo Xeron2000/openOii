@@ -1,7 +1,7 @@
 # OiiOii ↔ openOii 功能差距与复刻路线
 
-> 状态：Phase 0–5a + LangGraph + redesign **已完成**；Skills / Reimagine / 选中局部重做 **已加深实现**（非空壳 catalog）  
-> 原则：复刻 **产品原语**，不 1:1 抄 UI / 不追闭源模型护城河。
+> 状态：Phase 0–5a + LangGraph + redesign **已完成**；**仅保留 6 个简单 Skill**（厚 directives/template/pipeline），拉片/广告等复杂流已从产品面下线  
+> 原则：复刻 **产品原语**，不 1:1 抄 UI / 不追闭源模型护城河；复杂实验流不做。
 
 ## 产品原语对照
 

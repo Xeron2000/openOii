@@ -71,9 +71,6 @@ class OutlineAgent(BaseAgent):
         skill_obj = skill_payload(skill_id)
         if skill_obj:
             payload["skill"] = skill_obj
-        reimagine_meta = getattr(ctx.project, "reimagine_meta", None)
-        if isinstance(reimagine_meta, dict) and reimagine_meta:
-            payload["reimagine_meta"] = reimagine_meta
         try:
             from app.services.universe_context import build_universe_context
 

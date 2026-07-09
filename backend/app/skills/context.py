@@ -23,6 +23,7 @@ def skill_payload(skill_id: str | None) -> dict[str, Any] | None:
         "prefer_auto_mode": skill.prefer_auto_mode,
         "default_target_shot_count": skill.default_target_shot_count,
         "default_style": skill.default_style,
+        "story_template": skill.story_template,
     }
 
 
@@ -63,8 +64,11 @@ def apply_skill_defaults_to_create(
             "creation_mode": resolved_mode,
         }
 
-    if not resolved_story and skill.story_prefix:
-        resolved_story = skill.story_prefix.rstrip() + "\n"
+    if not resolved_story:
+        if skill.story_template.strip():
+            resolved_story = skill.story_template.strip() + "\n"
+        elif skill.story_prefix:
+            resolved_story = skill.story_prefix.rstrip() + "\n"
     if not resolved_style and skill.default_style:
         resolved_style = skill.default_style
     if resolved_shots is None and skill.default_target_shot_count is not None:

@@ -482,6 +482,7 @@ export type SkillApiRow = {
 	default_creation_mode: string | null;
 	default_target_shot_count: number | null;
 	story_prefix: string;
+	story_template: string;
 	directives: string;
 	pipeline_hints: Record<string, unknown>;
 	placeholder: string;
@@ -490,31 +491,6 @@ export type SkillApiRow = {
 
 export const skillsApi = {
 	list: () => fetchApi<SkillApiRow[]>("/api/v1/skills"),
-};
-
-export type ReimagineAnalysis = {
-	dimensions: Array<{ key: string; label: string; value: string }>;
-	slots: Array<{
-		key: string;
-		label: string;
-		current_value: string;
-		replaceable: boolean;
-	}>;
-	reconstructed_prompt: string;
-	source_brief: string;
-	skill_id: string;
-};
-
-export const reimagineApi = {
-	analyze: (data: {
-		source_brief: string;
-		replacements?: Record<string, string>;
-		style_hint?: string | null;
-	}) =>
-		fetchApi<ReimagineAnalysis>("/api/v1/reimagine/analyze", {
-			method: "POST",
-			body: JSON.stringify(data),
-		}),
 };
 
 export const configApi = {

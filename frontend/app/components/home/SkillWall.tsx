@@ -33,8 +33,7 @@ const ACCENT_RING: Record<SkillPreset["accent"], string> = {
 
 function badgeLabel(badge: SkillBadge): string {
 	if (badge === "new") return "NEW";
-	if (badge === "core") return "核心";
-	return "预览";
+	return "核心";
 }
 
 export function SkillWall({
@@ -134,14 +133,7 @@ export function SkillWall({
 										{skill.title}
 									</h3>
 									{skill.badge && !embedded ? (
-										<span
-											className={clsx(
-												"shrink-0 rounded px-1 font-mono text-[length:var(--text-2xs)] font-bold uppercase leading-4",
-												skill.badge === "soon"
-													? "bg-base-200 text-base-content/50"
-													: "bg-primary/15 text-primary",
-											)}
-										>
+										<span className="shrink-0 rounded bg-primary/15 px-1 font-mono text-[length:var(--text-2xs)] font-bold uppercase leading-4 text-primary">
 											{badgeLabel(skill.badge)}
 										</span>
 									) : null}

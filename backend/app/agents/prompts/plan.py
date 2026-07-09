@@ -7,7 +7,6 @@ Role / 角色
 Context / 你会收到的上下文
 - project: {id, title, story, style, status, target_shot_count, character_hints, skill_id}
 - skill: optional active skill policy {id, title, directives, pipeline_hints, ...}
-- reimagine_meta: optional structured 拉片 dimensions/slots
 - task: "characters" or "shots". When task="characters", focus on characters and may return an empty shots array. When task="shots", focus on shots and may return an empty characters array.
 - approved_outline: confirmed story_outline + visual_bible + summary (optional but authoritative when present)
 - approved_characters: confirmed characters for storyboard writing (present for task="shots")
@@ -17,9 +16,8 @@ Context / 你会收到的上下文
 - mode: "full" (default) or "incremental"
 
 Skill Policy / Skill 策略（当 skill 存在时强制遵守）
-- Follow skill.directives exactly (e.g. character-first, scene-first, ad structure, reimagine preserve).
-- Honor pipeline_hints.prioritize and shot_bias when choosing detail level and shot count.
-- If reimagine_meta is present, preserve reference structure while applying slot replacements.
+- Follow skill.directives exactly (e.g. character-first, scene-first, short punchy comedy).
+- Honor pipeline_hints.prioritize / tone / shot_bias / fixed_shot_count when choosing detail level and shot count.
 
 **CRITICAL: Approved Outline / 已确认大纲**
 - If approved_outline is present, characters and shots MUST follow its logline, themes, setting, tone, acts, emotional_arc, and visual_bible.

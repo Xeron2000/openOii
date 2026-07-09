@@ -1,7 +1,7 @@
 import { lazy, Suspense, useState, useCallback, useEffect, useRef } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { projectsApi, reimagineApi, universesApi } from "~/services/api";
+import { projectsApi, universesApi } from "~/services/api";
 import { Button } from "~/components/ui/Button";
 import { Card } from "~/components/ui/Card";
 import {
@@ -94,23 +94,6 @@ export function HomePage() {
 	const [storyPlaceholder, setStoryPlaceholder] = useState(
 		"主角、冲突、关键画面、情绪基调。",
 	);
-	const [reimagineOpen, setReimagineOpen] = useState(false);
-	const [reimagineBrief, setReimagineBrief] = useState("");
-	const [reimagineBusy, setReimagineBusy] = useState(false);
-	const [reimagineError, setReimagineError] = useState<string | null>(null);
-	const [reimagineSlots, setReimagineSlots] = useState<
-		Array<{ key: string; label: string; current_value: string }>
-	>([]);
-	const [reimagineDimensions, setReimagineDimensions] = useState<
-		Array<{ key: string; label: string; value: string }>
-	>([]);
-	const [reimagineReplacements, setReimagineReplacements] = useState<
-		Record<string, string>
-	>({});
-	const [reimagineMeta, setReimagineMeta] = useState<Record<
-		string,
-		unknown
-	> | null>(null);
 	const storyInputRef = useRef<HTMLTextAreaElement>(null);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	useEffect(() => {
@@ -197,8 +180,6 @@ export function HomePage() {
 			chapter_number: chapterNumber,
 			chapter_title: chapterTitle,
 			skill_id: activeSkillId,
-			reimagine_meta:
-				activeSkillId === "video-reimagine" ? reimagineMeta : undefined,
 			text_provider_override: null,
 			image_provider_override: null,
 			video_provider_override: null,
@@ -285,85 +266,24 @@ export function HomePage() {
 		if (skill.prefill.style) setStyle(skill.prefill.style);
 		if (skill.prefill.creationMode) setCreationMode(skill.prefill.creationMode);
 		if (skill.prefill.placeholder) setStoryPlaceholder(skill.prefill.placeholder);
-		if (skill.prefill.targetShotCount != null && shotCount == null) {
+		if (skill.prefill.targetShotCount != null) {
 			setShotCount(skill.prefill.targetShotCount);
 		}
-		if (skill.prefill.storyHint !== undefined && !story.trim()) {
-			setStory(skill.prefill.storyHint);
-		}
-		if (skill.id === "video-reimagine") {
-			setReimagineOpen(true);
-		} else {
-			setReimagineOpen(false);
+		// Fill starter scaffold only when story is empty / only old skill prefix
+		const template = skill.prefill.storyTemplate?.trim();
+		const hint = skill.prefill.storyHint ?? "";
+		if (!story.trim()) {
+			setStory(template ? `${template}\n` : hint);
+		} else if (template && story.trim().length < 40) {
+			// short leftover prefixes from previous skill → replace
+			setStory(`${template}\n`);
 		}
 		requestAnimationFrame(() => {
 			storyInputRef.current?.focus();
 			storyInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
 		});
-	}, [story, shotCount]);
+	}, [story]);
 
-	const handleReimagineAnalyze = async () => {
-		const brief = reimagineBrief.trim();
-		if (!brief || reimagineBusy) return;
-		setReimagineBusy(true);
-		setReimagineError(null);
-		try {
-			const result = await reimagineApi.analyze({
-				source_brief: brief,
-				replacements: reimagineReplacements,
-				style_hint: style,
-			});
-			setReimagineSlots(result.slots);
-			setReimagineDimensions(result.dimensions);
-			setStory(result.reconstructed_prompt);
-			setActiveSkillId("video-reimagine");
-			setCreationMode("review");
-			setReimagineMeta({
-				dimensions: result.dimensions,
-				slots: result.slots,
-				source_brief: result.source_brief,
-				replacements: reimagineReplacements,
-				reconstructed_prompt: result.reconstructed_prompt,
-			});
-		} catch (e) {
-			if (import.meta.env.DEV) console.error("[reimagine]", e);
-			setReimagineError("拉片分析失败，请检查后端或稍后重试");
-		} finally {
-			setReimagineBusy(false);
-		}
-	};
-
-	const applyReimagineWithReplacements = async () => {
-		const brief = reimagineBrief.trim();
-		if (!brief || reimagineBusy) return;
-		setReimagineBusy(true);
-		setReimagineError(null);
-		try {
-			const result = await reimagineApi.analyze({
-				source_brief: brief,
-				replacements: reimagineReplacements,
-				style_hint: style,
-			});
-			setReimagineSlots(result.slots);
-			setReimagineDimensions(result.dimensions);
-			setStory(result.reconstructed_prompt);
-			setActiveSkillId("video-reimagine");
-			setReimagineMeta({
-				dimensions: result.dimensions,
-				slots: result.slots,
-				source_brief: result.source_brief,
-				replacements: reimagineReplacements,
-				reconstructed_prompt: result.reconstructed_prompt,
-			});
-			setReimagineOpen(false);
-			storyInputRef.current?.focus();
-		} catch (e) {
-			if (import.meta.env.DEV) console.error("[reimagine]", e);
-			setReimagineError("应用替换失败，请稍后重试");
-		} finally {
-			setReimagineBusy(false);
-		}
-	};
 
 	const navChip =
 		"touch-target-dense inline-flex items-center gap-1.5 rounded-[var(--radius-md)] px-2 text-[length:var(--text-xs)] font-bold transition-colors duration-[var(--duration-fast)] hover:bg-base-200";
@@ -435,138 +355,6 @@ export function HomePage() {
 							</Link>
 						</nav>
 					</header>
-
-					{reimagineOpen ? (
-						<Card className="card-comic w-full overflow-hidden !p-0" data-shell="reimagine">
-							<div className="flex flex-wrap items-center justify-between gap-2 border-b border-base-content/10 bg-secondary/10 px-[var(--space-3)] py-[var(--space-2)]">
-								<div className="min-w-0">
-									<p className="m-0 font-mono text-[length:var(--text-2xs)] font-semibold uppercase tracking-wide text-base-content/45">
-										Reimagine
-									</p>
-									<h2 className="m-0 font-heading text-[length:var(--text-md)] font-bold">
-										拉片复刻
-									</h2>
-								</div>
-								<button
-									type="button"
-									className="touch-target-dense text-[length:var(--text-xs)] font-bold text-base-content/55 transition-colors hover:text-primary"
-									onClick={() => setReimagineOpen(false)}
-								>
-									收起
-								</button>
-							</div>
-							<p className="m-0 border-b border-base-content/8 px-[var(--space-3)] py-1.5 text-[length:var(--text-2xs)] text-base-content/55">
-								粘贴参考片描述 / 口播 / 分镜笔记 → 18 维拆解 + 槽位替换 → 写入创作台并带 skill 策略生成
-							</p>
-							<div className="grid gap-[var(--space-3)] p-[var(--space-3)] lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-								<div>
-									<label
-										htmlFor="reimagine-brief"
-										className="mb-1 block font-heading text-[length:var(--text-sm)] font-bold"
-									>
-										参考片要点
-									</label>
-									<textarea
-										id="reimagine-brief"
-										name="reimagine_brief"
-										className="input-doodle min-h-24 w-full resize-y p-2 text-[length:var(--text-sm)]"
-										placeholder="例：末日办公室，员工一拳打向老板，快节奏剪辑…"
-										value={reimagineBrief}
-										onChange={(e) => setReimagineBrief(e.target.value)}
-										disabled={reimagineBusy}
-										autoComplete="off"
-									/>
-									{reimagineError ? (
-										<p className="m-0 mt-1.5 text-[length:var(--text-2xs)] text-error">
-											{reimagineError}
-										</p>
-									) : null}
-									<div className="mt-2 flex flex-wrap gap-2">
-										<Button
-											variant="secondary"
-											size="sm"
-											loading={reimagineBusy}
-											disabled={!reimagineBrief.trim() || reimagineBusy}
-											onClick={handleReimagineAnalyze}
-										>
-											分析拆解
-										</Button>
-										<Button
-											variant="primary"
-											size="sm"
-											loading={reimagineBusy}
-											disabled={!reimagineBrief.trim() || reimagineBusy}
-											onClick={applyReimagineWithReplacements}
-										>
-											写入创作台
-										</Button>
-									</div>
-									{reimagineDimensions.length > 0 ? (
-										<div className="mt-3 max-h-48 overflow-y-auto rounded-[var(--radius-md)] border border-base-content/10 bg-base-200/40 p-2">
-											<p className="m-0 mb-1.5 font-heading text-[length:var(--text-xs)] font-bold">
-												18 维导演拆解
-											</p>
-											<ul className="m-0 grid list-none gap-1 p-0 sm:grid-cols-2">
-												{reimagineDimensions.map((dim) => (
-													<li
-														key={dim.key}
-														className="rounded border border-base-content/8 bg-base-100 px-1.5 py-1"
-													>
-														<span className="block font-mono text-[length:var(--text-2xs)] text-base-content/50">
-															{dim.label}
-														</span>
-														<span className="block text-[length:var(--text-2xs)] leading-snug">
-															{dim.value || "—"}
-														</span>
-													</li>
-												))}
-											</ul>
-										</div>
-									) : null}
-								</div>
-								<div className="space-y-1.5">
-									<p className={sectionLabel}>元素替换（可编辑槽位）</p>
-									{(reimagineSlots.length > 0
-										? reimagineSlots
-										: [
-												{ key: "characters", label: "角色", current_value: "" },
-												{ key: "scenes", label: "场景", current_value: "" },
-												{ key: "props", label: "道具", current_value: "" },
-												{ key: "visual_style", label: "画面风格", current_value: "" },
-												{ key: "effects", label: "特效", current_value: "" },
-												{ key: "music", label: "音乐", current_value: "" },
-											]
-									).map((slot) => (
-										<label key={slot.key} className="form-control">
-											<span className="label px-0 py-0">
-												<span className="label-text font-mono text-[length:var(--text-2xs)] text-base-content/60">
-													{slot.label}
-													{slot.current_value ? (
-														<span className="ml-1 text-base-content/35">
-															现：{slot.current_value.slice(0, 24)}
-															{slot.current_value.length > 24 ? "…" : ""}
-														</span>
-													) : null}
-												</span>
-											</span>
-											<input
-												className="input input-bordered input-sm h-8 min-h-8 bg-base-100"
-												placeholder={slot.current_value || `替换${slot.label}`}
-												value={reimagineReplacements[slot.key] ?? ""}
-												onChange={(e) =>
-													setReimagineReplacements((prev) => ({
-														...prev,
-														[slot.key]: e.target.value,
-													}))
-												}
-												autoComplete="off"
-											/>
-										</label>
-									))}
-								</div>
-							</div>
-						</Card>
-					) : null}
 
 					<Card
 						className="card-comic animate-draw-in w-full overflow-hidden !p-0"

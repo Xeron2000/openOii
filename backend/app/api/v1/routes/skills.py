@@ -24,6 +24,7 @@ class SkillRead(BaseModel):
     default_creation_mode: str | None = None
     default_target_shot_count: int | None = None
     story_prefix: str = ""
+    story_template: str = ""
     directives: str = ""
     pipeline_hints: dict[str, Any] = Field(default_factory=dict)
     placeholder: str = ""
@@ -43,6 +44,7 @@ def _skill_read(skill) -> SkillRead:
         default_creation_mode=skill.default_creation_mode,
         default_target_shot_count=skill.default_target_shot_count,
         story_prefix=skill.story_prefix,
+        story_template=getattr(skill, "story_template", "") or "",
         directives=skill.directives,
         pipeline_hints=dict(skill.pipeline_hints),
         placeholder=skill.placeholder,
